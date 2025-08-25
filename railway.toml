@@ -1,0 +1,10 @@
+[build]
+builder = "nixpacks"
+
+[build.nixpacksConfig]
+install = "npm install"
+build = "npm run build"
+start = "node autonomous-agent.js"
+
+[deploy]
+startCommand = "node autonomous-agent.js"
