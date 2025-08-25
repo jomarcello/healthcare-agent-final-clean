@@ -31,12 +31,15 @@ class AutonomousHealthcareAgent {
     // Agent configuration
     this.config = {
       githubToken: process.env.GITHUB_TOKEN || this.throwMissingEnvError('GITHUB_TOKEN'),
-      railwayToken: process.env.RAILWAY_TOKEN || this.throwMissingEnvError('RAILWAY_TOKEN'),
+      railwayToken: process.env.RAILWAY_TOKEN || process.env.RAILWAY_API_TOKEN || this.throwMissingEnvError('RAILWAY_TOKEN'),
       notionApiKey: process.env.NOTION_API_KEY || this.throwMissingEnvError('NOTION_API_KEY'),
       notionDatabaseId: process.env.NOTION_DATABASE_ID || this.throwMissingEnvError('NOTION_DATABASE_ID'),
       elevenLabsApiKey: process.env.ELEVENLABS_API_KEY || this.throwMissingEnvError('ELEVENLABS_API_KEY'),
       openRouterApiKey: process.env.OPENROUTER_API_KEY || this.throwMissingEnvError('OPENROUTER_API_KEY'),
-      masterAgentId: process.env.ELEVENLABS_AGENT_ID || this.throwMissingEnvError('ELEVENLABS_AGENT_ID')
+      masterAgentId: process.env.ELEVENLABS_AGENT_ID || this.throwMissingEnvError('ELEVENLABS_AGENT_ID'),
+      smitheryApiKey: process.env.SMITHERY_API_KEY || this.throwMissingEnvError('SMITHERY_API_KEY'),
+      smitheryProfile: process.env.SMITHERY_PROFILE || this.throwMissingEnvError('SMITHERY_PROFILE'),
+      telegramBotToken: process.env.TELEGRAM_BOT_TOKEN || this.throwMissingEnvError('TELEGRAM_BOT_TOKEN')
     };
     
     // EXA API key for real healthcare practice discovery
@@ -173,6 +176,17 @@ class AutonomousHealthcareAgent {
           error: error.message,
           stack: error.stack
         });
+      }
+    });
+
+    // Telegram Bot Webhook endpoint
+    this.app.post('/telegram-webhook', async (req, res) => {
+      try {
+        await this.handleTelegramUpdate(req.body);
+        res.json({ ok: true });
+      } catch (error) {
+        console.error('Telegram webhook error:', error);
+        res.status(500).json({ error: error.message });
       }
     });
   }
@@ -1694,6 +1708,99 @@ NODE_ENV=production`;
     return new Promise(resolve => setTimeout(resolve, ms));
   }
 
+  async setupTelegramBot() {
+    const webhookUrl = `https://healthcare-agent-clean-mcp-production.up.railway.app/telegram-webhook`;
+    
+    try {
+      // Set webhook
+      const response = await axios.post(`https://api.telegram.org/bot${this.config.telegramBotToken}/setWebhook`, {
+        url: webhookUrl
+      });
+      
+      if (response.data.ok) {
+        console.log(chalk.green('✅ Telegram webhook set successfully'));
+        console.log(chalk.blue(`🔗 Webhook URL: ${webhookUrl}`));
+      } else {
+        console.error('❌ Failed to set Telegram webhook:', response.data);
+      }
+    } catch (error) {
+      console.error('❌ Telegram setup error:', error.message);
+    }
+  }
+
+  async handleTelegramUpdate(update) {
+    if (!update.message) return;
+    
+    const chatId = update.message.chat.id;
+    const text = update.message.text;
+    
+    console.log(chalk.yellow(`📱 Telegram message from ${chatId}: ${text}`));
+    
+    // Handle commands
+    if (text === '/start') {
+      await this.sendTelegramMessage(chatId, 
+        '🤖 Welcome to Healthcare Lead Generation Bot!\n\n' +
+        'Commands:\n' +
+        '/leads - Generate 3 healthcare leads\n' +
+        '/status - Check agent status\n' +
+        '/help - Show this help message'
+      );
+    } else if (text === '/leads') {
+      await this.sendTelegramMessage(chatId, '🚀 Starting healthcare lead generation...');
+      
+      try {
+        const results = await this.executeAutonomousWorkflow(3);
+        const successful = results.filter(r => r.status === 'success').length;
+        
+        await this.sendTelegramMessage(chatId, 
+          `✅ Healthcare lead generation completed!\n\n` +
+          `📊 Results: ${successful}/${results.length} successful\n\n` +
+          results.map(r => 
+            r.status === 'success' 
+              ? `✅ ${r.company}\n🌐 ${r.demoUrl}`
+              : `❌ ${r.error}`
+          ).join('\n\n')
+        );
+      } catch (error) {
+        await this.sendTelegramMessage(chatId, `❌ Error: ${error.message}`);
+      }
+    } else if (text === '/status') {
+      await this.sendTelegramMessage(chatId, 
+        `🤖 Healthcare Agent Status\n\n` +
+        `✅ Online and ready\n` +
+        `⏱️ Uptime: ${Math.floor(process.uptime())} seconds\n` +
+        `🔍 Search engine: EXA API\n` +
+        `🚀 Ready for autonomous healthcare lead generation`
+      );
+    } else if (text === '/help') {
+      await this.sendTelegramMessage(chatId, 
+        '🤖 Healthcare Lead Generation Bot Help\n\n' +
+        'This bot automatically finds healthcare practices, scrapes their data, creates personalized demos, and deploys them to Railway.\n\n' +
+        'Commands:\n' +
+        '/start - Welcome message\n' +
+        '/leads - Generate healthcare leads\n' +
+        '/status - Check bot status\n' +
+        '/help - Show this message'
+      );
+    } else {
+      await this.sendTelegramMessage(chatId, 
+        'ℹ️ Unknown command. Type /help for available commands.'
+      );
+    }
+  }
+
+  async sendTelegramMessage(chatId, text) {
+    try {
+      await axios.post(`https://api.telegram.org/bot${this.config.telegramBotToken}/sendMessage`, {
+        chat_id: chatId,
+        text: text,
+        parse_mode: 'Markdown'
+      });
+    } catch (error) {
+      console.error('❌ Failed to send Telegram message:', error.message);
+    }
+  }
+
   start() {
     this.app.listen(this.port, () => {
       console.log(chalk.green('🤖 AUTONOMOUS HEALTHCARE AGENT STARTED - EXA SEARCH VERSION'));
@@ -1701,13 +1808,20 @@ NODE_ENV=production`;
       console.log(`🌐 Server: http://localhost:${this.port}`);
       console.log(`📊 Health: http://localhost:${this.port}/health`);
       console.log(`📋 Status: http://localhost:${this.port}/status`);
+      console.log(`📱 Telegram: /telegram-webhook`);
       console.log('');
       console.log(chalk.cyan('🎯 TRIGGER ENDPOINTS:'));
       console.log(`   POST /create-leads { "count": 3 }`);
       console.log(`   POST /process-urls { "urls": ["https://..."] }`);
+      console.log(`   POST /telegram-webhook (Telegram Bot)`);
       console.log('');
       console.log(chalk.yellow('⚡ AUTONOMOUS MODE: Ready for healthcare lead automation'));
       console.log(chalk.gray(`Search method: EXA API for global healthcare practices`));
+      
+      // Setup Telegram Bot after server starts
+      this.setupTelegramBot().catch(error => {
+        console.error('❌ Failed to setup Telegram bot:', error.message);
+      });
     });
   }
 }
