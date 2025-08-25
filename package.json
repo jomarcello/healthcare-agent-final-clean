@@ -1,6 +1,7 @@
 {
   "name": "healthcare-agent",
   "version": "1.0.0",
+  "type": "module",
   "private": true,
   "description": "Healthcare Agent - Autonomous Healthcare Practice Lead Generation Agent",
   "author": "Healthcare Agent Team",

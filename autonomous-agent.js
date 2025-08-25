@@ -1709,9 +1709,24 @@ NODE_ENV=production`;
   }
 
   async setupTelegramBot() {
+    if (!this.config.telegramBotToken || this.config.telegramBotToken === 'dummy_token_for_test') {
+      console.log(chalk.yellow('⚠️ Telegram bot disabled - no valid token provided'));
+      return;
+    }
+
     const webhookUrl = `https://healthcare-agent-clean-mcp-production.up.railway.app/telegram-webhook`;
     
     try {
+      // Test bot token first
+      const testResponse = await axios.get(`https://api.telegram.org/bot${this.config.telegramBotToken}/getMe`);
+      
+      if (!testResponse.data.ok) {
+        console.log(chalk.yellow('⚠️ Telegram bot token invalid - bot functionality disabled'));
+        return;
+      }
+      
+      console.log(chalk.green(`✅ Telegram bot authenticated: @${testResponse.data.result.username}`));
+      
       // Set webhook
       const response = await axios.post(`https://api.telegram.org/bot${this.config.telegramBotToken}/setWebhook`, {
         url: webhookUrl
@@ -1721,10 +1736,16 @@ NODE_ENV=production`;
         console.log(chalk.green('✅ Telegram webhook set successfully'));
         console.log(chalk.blue(`🔗 Webhook URL: ${webhookUrl}`));
       } else {
-        console.error('❌ Failed to set Telegram webhook:', response.data);
+        console.log(chalk.yellow('⚠️ Telegram webhook setup failed - continuing without bot'));
+        console.error('Webhook error:', response.data);
       }
     } catch (error) {
-      console.error('❌ Telegram setup error:', error.message);
+      if (error.response && error.response.status === 401) {
+        console.log(chalk.yellow('⚠️ Invalid Telegram bot token - bot functionality disabled'));
+      } else {
+        console.log(chalk.yellow('⚠️ Telegram setup failed - continuing without bot'));
+        console.error('Setup error:', error.message);
+      }
     }
   }
 
