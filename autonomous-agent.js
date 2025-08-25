@@ -1887,8 +1887,29 @@ NODE_ENV=production`;
         '/start - Welcome message\n' +
         '/leads - Generate healthcare leads\n' +
         '/status - Check bot status\n' +
-        '/help - Show this message'
+        '/help - Show this message\n' +
+        '/force - Force start workflow (debug)\n\n' +
+        'AI Chat: Send any message about healthcare leads!'
       );
+    } else if (text === '/force') {
+      await this.sendTelegramMessage(chatId, '🚀 FORCE: Starting healthcare lead generation...');
+      
+      try {
+        const results = await this.executeAutonomousWorkflow(2); // Start with 2 for faster testing
+        const successful = results.filter(r => r.status === 'success').length;
+        
+        await this.sendTelegramMessage(chatId, 
+          `✅ FORCE workflow completed!\n\n` +
+          `📊 Results: ${successful}/${results.length} successful\n\n` +
+          results.map(r => 
+            r.status === 'success' 
+              ? `✅ ${r.company}\n🌐 ${r.demoUrl}`
+              : `❌ ${r.error}`
+          ).join('\n\n')
+        );
+      } catch (error) {
+        await this.sendTelegramMessage(chatId, `❌ FORCE Error: ${error.message}`);
+      }
     } else {
       // 🤖 AI CHAT MODE - Process natural language with OpenRouter
       await this.handleAIChat(chatId, text);
@@ -1907,7 +1928,7 @@ NODE_ENV=production`;
       
       // Call OpenRouter API for AI response
       const response = await axios.post('https://openrouter.ai/api/v1/chat/completions', {
-        model: 'anthropic/claude-3.5-sonnet',
+        model: 'qwen/qwen3-coder:free',
         messages: [
           {
             role: 'system',
@@ -1943,14 +1964,20 @@ Keep responses concise and helpful. If they want to generate leads, tell them yo
       
       const aiResponse = response.data.choices[0].message.content;
       
-      // Check if user wants to generate leads based on AI response or user message
-      const wantsLeads = userMessage.toLowerCase().includes('generate') || 
-                        userMessage.toLowerCase().includes('create') ||
-                        userMessage.toLowerCase().includes('lead') ||
-                        userMessage.toLowerCase().includes('demo') ||
-                        aiResponse.toLowerCase().includes('generate leads');
+      // Check if user wants to generate leads - more flexible detection
+      const userText = userMessage.toLowerCase();
+      const wantsLeads = userText.includes('generate') || 
+                        userText.includes('create') ||
+                        userText.includes('lead') ||
+                        userText.includes('demo') ||
+                        userText.includes('start') ||
+                        userText.includes('automation') ||
+                        userText.includes('workflow') ||
+                        userText.includes('practice');
       
-      if (wantsLeads && (userMessage.toLowerCase().includes('lead') || userMessage.toLowerCase().includes('demo'))) {
+      console.log(chalk.yellow(`🔍 Intent detection: wantsLeads=${wantsLeads}, userMessage="${userMessage}"`));
+      
+      if (wantsLeads) {
         // Start lead generation workflow
         await this.sendTelegramMessage(chatId, `${aiResponse}\n\n🚀 Starting healthcare lead generation now...`);
         
