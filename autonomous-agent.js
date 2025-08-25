@@ -1890,8 +1890,98 @@ NODE_ENV=production`;
         '/help - Show this message'
       );
     } else {
+      // 🤖 AI CHAT MODE - Process natural language with OpenRouter
+      await this.handleAIChat(chatId, text);
+    }
+  }
+
+  async handleAIChat(chatId, userMessage) {
+    try {
+      console.log(chalk.blue(`🤖 AI Chat request: "${userMessage}"`));
+      
+      // Send typing indicator
+      await axios.post(`https://api.telegram.org/bot${this.config.telegramBotToken}/sendChatAction`, {
+        chat_id: chatId,
+        action: 'typing'
+      });
+      
+      // Call OpenRouter API for AI response
+      const response = await axios.post('https://openrouter.ai/api/v1/chat/completions', {
+        model: 'anthropic/claude-3.5-sonnet',
+        messages: [
+          {
+            role: 'system',
+            content: `You are an AI assistant for a Healthcare Lead Generation Agent. 
+
+Your capabilities:
+- Generate healthcare practice leads automatically
+- Create personalized demo websites for clinics
+- Deploy demonstrations to Railway platform
+- Store leads in Notion database
+- Create voice agents with ElevenLabs
+
+When users ask about healthcare lead generation, offer to:
+1. Generate leads (trigger the /leads workflow)
+2. Explain how the automation works
+3. Show status and capabilities
+
+Keep responses concise and helpful. If they want to generate leads, tell them you'll start the process.`
+          },
+          {
+            role: 'user', 
+            content: userMessage
+          }
+        ],
+        max_tokens: 500,
+        temperature: 0.7
+      }, {
+        headers: {
+          'Authorization': `Bearer ${this.config.openRouterApiKey}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      const aiResponse = response.data.choices[0].message.content;
+      
+      // Check if user wants to generate leads based on AI response or user message
+      const wantsLeads = userMessage.toLowerCase().includes('generate') || 
+                        userMessage.toLowerCase().includes('create') ||
+                        userMessage.toLowerCase().includes('lead') ||
+                        userMessage.toLowerCase().includes('demo') ||
+                        aiResponse.toLowerCase().includes('generate leads');
+      
+      if (wantsLeads && (userMessage.toLowerCase().includes('lead') || userMessage.toLowerCase().includes('demo'))) {
+        // Start lead generation workflow
+        await this.sendTelegramMessage(chatId, `${aiResponse}\n\n🚀 Starting healthcare lead generation now...`);
+        
+        try {
+          const results = await this.executeAutonomousWorkflow(3);
+          const successful = results.filter(r => r.status === 'success').length;
+          
+          await this.sendTelegramMessage(chatId, 
+            `✅ Healthcare lead generation completed!\n\n` +
+            `📊 Results: ${successful}/${results.length} successful\n\n` +
+            results.map(r => 
+              r.status === 'success' 
+                ? `✅ ${r.company}\n🌐 ${r.demoUrl}`
+                : `❌ ${r.error}`
+            ).join('\n\n')
+          );
+        } catch (error) {
+          await this.sendTelegramMessage(chatId, `❌ Lead generation error: ${error.message}`);
+        }
+      } else {
+        // Send AI response only
+        await this.sendTelegramMessage(chatId, aiResponse);
+      }
+      
+    } catch (error) {
+      console.error('❌ AI Chat error:', error.message);
       await this.sendTelegramMessage(chatId, 
-        'ℹ️ Unknown command. Type /help for available commands.'
+        `🤖 I'm having trouble processing your message right now. Please try:\n\n` +
+        `/leads - Generate healthcare leads\n` +
+        `/status - Check agent status\n` +
+        `/help - Show available commands`
       );
     }
   }
