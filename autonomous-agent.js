@@ -16,8 +16,42 @@ import chalk from 'chalk';
 import fs from 'fs/promises';
 import { execSync } from 'child_process';
 import axios from 'axios';
+import winston from 'winston';
 
 dotenv.config();
+
+// 🔧 PERMANENT LOGGING SOLUTION - Railway Persistent Logs
+const logger = winston.createLogger({
+  level: 'info',
+  format: winston.format.combine(
+    winston.format.timestamp(),
+    winston.format.errors({ stack: true }),
+    winston.format.json()
+  ),
+  defaultMeta: { service: 'healthcare-agent' },
+  transports: [
+    // Always log to console for Railway logs
+    new winston.transports.Console({
+      format: winston.format.combine(
+        winston.format.colorize(),
+        winston.format.simple()
+      )
+    }),
+    // File logging for persistence (Railway ephemeral but helps debugging)
+    new winston.transports.File({ 
+      filename: '/tmp/healthcare-agent.log',
+      maxsize: 10000000, // 10MB
+      maxFiles: 3,
+      tailable: true
+    })
+  ]
+});
+
+// Override console methods to use winston
+console.log = (...args) => logger.info(args.join(' '));
+console.error = (...args) => logger.error(args.join(' '));
+console.warn = (...args) => logger.warn(args.join(' '));
+console.info = (...args) => logger.info(args.join(' '));
 
 // REMOVED: Railway MCP Direct Connection - Using GitHub Actions instead
 
@@ -89,6 +123,58 @@ class AutonomousHealthcareAgent {
         ],
         searchEngine: 'EXA API',
         ready: true
+      });
+    });
+
+    // 🔧 PERMANENT LOG ENDPOINT - Never lose logs again!
+    this.app.get('/logs', async (req, res) => {
+      try {
+        const logContent = await fs.readFile('/tmp/healthcare-agent.log', 'utf-8');
+        const lines = logContent.split('\n').filter(line => line.trim());
+        const recentLogs = lines.slice(-200); // Last 200 log entries
+        
+        res.json({
+          logs: recentLogs,
+          totalLines: lines.length,
+          showing: recentLogs.length,
+          timestamp: new Date().toISOString()
+        });
+      } catch (error) {
+        res.json({
+          logs: ['Log file not found - agent may have just started'],
+          error: error.message,
+          timestamp: new Date().toISOString()
+        });
+      }
+    });
+
+    // 🔧 LIVE LOG STREAM - Real-time logging
+    this.app.get('/logs/live', (req, res) => {
+      res.setHeader('Content-Type', 'text/plain');
+      res.setHeader('Cache-Control', 'no-cache');
+      res.setHeader('Connection', 'keep-alive');
+      
+      // Send initial message
+      res.write('🔧 Healthcare Agent Live Logs - Connected!\n\n');
+      
+      // Monitor log file changes (simplified approach)
+      const interval = setInterval(async () => {
+        try {
+          const logContent = await fs.readFile('/tmp/healthcare-agent.log', 'utf-8');
+          const lines = logContent.split('\n').filter(line => line.trim());
+          const recentLine = lines[lines.length - 1];
+          
+          if (recentLine) {
+            res.write(`${new Date().toISOString()}: ${recentLine}\n`);
+          }
+        } catch (error) {
+          res.write(`LOG ERROR: ${error.message}\n`);
+        }
+      }, 2000);
+      
+      // Clean up on client disconnect
+      req.on('close', () => {
+        clearInterval(interval);
       });
     });
 
