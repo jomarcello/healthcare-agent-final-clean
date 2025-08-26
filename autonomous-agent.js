@@ -79,8 +79,9 @@ class AutonomousHealthcareAgent {
     // EXA API key for real healthcare practice discovery
     this.exaApiKey = process.env.EXA_API_KEY || this.throwMissingEnvError('EXA_API_KEY');
     
-    // Railway MCP client (initialized on first use)
+    // MCP clients (initialized on first use)
     this.railwayMCPClient = null;
+    this.elevenLabsMCPClient = null;
   }
 
   setupMiddleware() {
@@ -683,27 +684,46 @@ class AutonomousHealthcareAgent {
   }
 
   async createElevenLabsAgent(practiceData) {
-    // This would use ElevenLabs MCP to create voice agent
-    // For now, returning the master agent ID as fallback
-    
     try {
-      const prompt = this.generatePracticeSpecificPrompt(practiceData);
-      // Generate appropriate first message based on version type
+      console.log(`   🔗 Connecting to ElevenLabs MCP...`);
+      const client = await this.initializeElevenLabsMCP();
+      
+      // Generate practice-specific prompt and first message
+      const systemPrompt = this.generatePracticeSpecificPrompt(practiceData);
       const firstMessage = practiceData.isGeneralVersion 
         ? `Thank you for calling ${practiceData.company}! This is your wellness assistant. Our experienced medical team is here to help you begin your healing journey. Which of our ${practiceData.practiceType} treatments can I help you schedule today?`
         : `Thank you for calling ${practiceData.company}! This is your wellness assistant. We're here to help you begin your healing journey with ${practiceData.contactName}. Which of our ${practiceData.practiceType} treatments can I help you schedule today?`;
       
-      // In real implementation:
-      // 1. Update master agent with practice data
-      // 2. Duplicate agent for this practice
-      // 3. Return new agent ID
+      console.log(`   🎯 Creating ElevenLabs agent for ${practiceData.company}...`);
       
-      const agentId = `agent_${Date.now()}_${practiceData.practiceId}`;
-      console.log(`   🎯 Generated agent prompt for ${practiceData.company}`);
+      // Use create_agent MCP tool
+      const result = await client.callTool("create_agent", {
+        name: `${practiceData.company} AI Assistant`,
+        first_message: firstMessage,
+        system_prompt: systemPrompt,
+        voice_id: "21m00Tcm4TlvDq8ikWAM", // Default ElevenLabs voice
+        language: "en",
+        llm: "gpt-4",
+        temperature: 0.7,
+        max_tokens: 150,
+        asr_quality: "high",
+        optimize_streaming_latency: 2,
+        stability: 0.8,
+        similarity_boost: 0.7,
+        turn_timeout: 10,
+        max_duration_seconds: 900,
+        record_voice: true,
+        retention_days: 30
+      });
       
-      return agentId;
+      console.log(`   ✅ Created ElevenLabs agent: ${result.content[0].text}`);
+      
+      // Extract agent ID from result
+      const agentData = JSON.parse(result.content[0].text);
+      return agentData.id || agentData.agent_id || `agent_${Date.now()}_${practiceData.practiceId}`;
       
     } catch (error) {
+      console.log(`   ❌ ElevenLabs MCP failed: ${error.message}`);
       console.log(`   ⚠️ ElevenLabs fallback: Using master agent`);
       return this.config.masterAgentId;
     }
@@ -956,6 +976,48 @@ class AutonomousHealthcareAgent {
       
     } catch (error) {
       console.log(`   ❌ Railway MCP initialization failed: ${error.message}`);
+      throw error;
+    }
+  }
+
+  async initializeElevenLabsMCP() {
+    if (this.elevenLabsMCPClient) {
+      return this.elevenLabsMCPClient; // Already initialized
+    }
+
+    try {
+      console.log(`   🔗 Initializing ElevenLabs MCP client...`);
+      
+      // Import MCP SDK dynamically
+      const { StreamableHTTPClientTransport } = await import("@modelcontextprotocol/sdk/client/streamableHttp.js");
+      const { Client } = await import("@modelcontextprotocol/sdk/client/index.js");
+
+      // Construct server URL with authentication
+      const url = new URL("https://server.smithery.ai/@elevenlabs/elevenlabs-mcp/mcp");
+      url.searchParams.set("api_key", "2f9f056b-67dc-47e1-b6c4-79c41bf85d07");
+      url.searchParams.set("profile", "zesty-clam-4hb4aa");
+      const serverUrl = url.toString();
+
+      const transport = new StreamableHTTPClientTransport(serverUrl);
+
+      // Create MCP client
+      const client = new Client({
+        name: "ElevenLabs Healthcare Agent",
+        version: "1.0.0"
+      });
+
+      await client.connect(transport);
+      console.log(`   ✅ Connected to ElevenLabs MCP server`);
+
+      // List available tools for debugging
+      const tools = await client.listTools();
+      console.log(`   📋 Available ElevenLabs tools: ${tools.tools.map(t => t.name).join(", ")}`);
+
+      this.elevenLabsMCPClient = client;
+      return client;
+      
+    } catch (error) {
+      console.log(`   ❌ ElevenLabs MCP initialization failed: ${error.message}`);
       throw error;
     }
   }
