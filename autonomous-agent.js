@@ -1938,6 +1938,7 @@ NODE_ENV=production`;
   async handleAIChat(chatId, userMessage) {
     try {
       console.log(chalk.blue(`🤖 AI Chat request: "${userMessage}"`));
+      console.log(chalk.blue(`🔑 Using OpenRouter API Key: ${this.config.openRouterApiKey ? 'SET' : 'MISSING'}`));
       
       // Send typing indicator
       await axios.post(`https://api.telegram.org/bot${this.config.telegramBotToken}/sendChatAction`, {
@@ -1945,13 +1946,22 @@ NODE_ENV=production`;
         action: 'typing'
       });
       
-      // Call OpenRouter API for AI response
-      const response = await axios.post('https://openrouter.ai/api/v1/chat/completions', {
-        model: 'qwen/qwen3-coder:free',
-        messages: [
-          {
-            role: 'system',
-            content: `You are an AI assistant for a Healthcare Lead Generation Agent. 
+      // Call OpenRouter API with unlimited retry (4000ms) for free models
+      console.log(chalk.yellow(`📡 Making OpenRouter API call with unlimited retry...`));
+      let response;
+      let attempt = 0;
+      
+      while (true) {
+        try {
+          attempt++;
+          console.log(chalk.cyan(`🔄 OpenRouter attempt ${attempt}...`));
+          
+          response = await axios.post('https://openrouter.ai/api/v1/chat/completions', {
+            model: 'qwen/qwen3-coder:free',
+            messages: [
+              {
+                role: 'system',
+                content: `You are an AI assistant for a Healthcare Lead Generation Agent. 
 
 Your capabilities:
 - Generate healthcare practice leads automatically
@@ -1966,20 +1976,35 @@ When users ask about healthcare lead generation, offer to:
 3. Show status and capabilities
 
 Keep responses concise and helpful. If they want to generate leads, tell them you'll start the process.`
-          },
-          {
-            role: 'user', 
-            content: userMessage
+              },
+              {
+                role: 'user', 
+                content: userMessage
+              }
+            ],
+            max_tokens: 500,
+            temperature: 0.7
+          }, {
+            headers: {
+              'Authorization': `Bearer ${this.config.openRouterApiKey}`,
+              'Content-Type': 'application/json'
+            }
+          });
+          
+          console.log(chalk.green(`✅ OpenRouter success on attempt ${attempt}`));
+          break; // Success, exit retry loop
+          
+        } catch (apiError) {
+          console.log(chalk.red(`❌ OpenRouter attempt ${attempt} failed: ${apiError.response?.status} - ${apiError.message}`));
+          console.log(chalk.yellow(`⏳ Waiting 4000ms before retry...`));
+          await new Promise(resolve => setTimeout(resolve, 4000));
+          
+          // Send progress update to user every 10 attempts
+          if (attempt % 10 === 0) {
+            await this.sendTelegramMessage(chatId, `🔄 Still working on your request... (attempt ${attempt})`);
           }
-        ],
-        max_tokens: 500,
-        temperature: 0.7
-      }, {
-        headers: {
-          'Authorization': `Bearer ${this.config.openRouterApiKey}`,
-          'Content-Type': 'application/json'
         }
-      });
+      }
       
       const aiResponse = response.data.choices[0].message.content;
       
