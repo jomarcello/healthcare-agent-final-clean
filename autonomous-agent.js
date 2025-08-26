@@ -1935,6 +1935,39 @@ NODE_ENV=production`;
     }
   }
 
+  extractWorkflowParameters(userMessage) {
+    const text = userMessage.toLowerCase();
+    
+    // Extract count (numbers in the message)
+    const countMatch = text.match(/(\d+)/);
+    const count = countMatch ? Math.min(parseInt(countMatch[1]), 10) : 3; // Max 10 for safety
+    
+    // Extract healthcare type
+    let type = 'healthcare practices';
+    if (text.includes('clinic')) type = 'clinics';
+    if (text.includes('cosmetic')) type = 'cosmetic clinics';
+    if (text.includes('aesthetic')) type = 'aesthetic clinics';
+    if (text.includes('dental') || text.includes('dentist')) type = 'dental practices';
+    if (text.includes('dermatology')) type = 'dermatology clinics';
+    if (text.includes('spa')) type = 'medical spas';
+    if (text.includes('hospital')) type = 'hospitals';
+    
+    // Extract location
+    let location = 'globally';
+    const locationWords = ['in', 'from', 'at', 'near'];
+    for (const word of locationWords) {
+      const index = text.indexOf(` ${word} `);
+      if (index !== -1) {
+        location = text.substring(index + word.length + 2).trim();
+        break;
+      }
+    }
+    
+    console.log(chalk.blue(`🎯 Extracted params: count=${count}, type="${type}", location="${location}"`));
+    
+    return { count, type, location };
+  }
+
   async handleAIChat(chatId, userMessage) {
     try {
       console.log(chalk.blue(`🤖 AI Chat request: "${userMessage}"`));
@@ -2031,11 +2064,16 @@ Keep responses concise and helpful. If they want to generate leads, tell them yo
       console.log(chalk.yellow(`🔍 Intent detection: wantsLeads=${wantsLeads}, userMessage="${userMessage}"`));
       
       if (wantsLeads) {
-        // Start lead generation workflow
-        await this.sendTelegramMessage(chatId, `${aiResponse}\n\n🚀 Starting healthcare lead generation now...`);
+        // Extract parameters from user message (flexible, not hardcoded)
+        const params = this.extractWorkflowParameters(userMessage);
+        
+        await this.sendTelegramMessage(chatId, 
+          `${aiResponse}\n\n🚀 Starting healthcare lead generation...\n` +
+          `📍 Target: ${params.count} ${params.type} in ${params.location}`
+        );
         
         try {
-          const results = await this.executeAutonomousWorkflow(3);
+          const results = await this.executeAutonomousWorkflow(params.count);
           const successful = results.filter(r => r.status === 'success').length;
           
           await this.sendTelegramMessage(chatId, 
