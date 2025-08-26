@@ -717,7 +717,7 @@ class AutonomousHealthcareAgent {
             quality: "high"
           },
           turn: {
-            turn_timeout: 10000
+            turn_timeout: 10
           }
         },
         platform_settings: {
