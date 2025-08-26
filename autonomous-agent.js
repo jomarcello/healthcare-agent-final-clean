@@ -996,6 +996,7 @@ class AutonomousHealthcareAgent {
       const url = new URL("https://server.smithery.ai/@elevenlabs/elevenlabs-mcp/mcp");
       url.searchParams.set("api_key", "2f9f056b-67dc-47e1-b6c4-79c41bf85d07");
       url.searchParams.set("profile", "zesty-clam-4hb4aa");
+      url.searchParams.set("elevenlabs_api_key", "sk_682da5dc69d0e1c65a6dc5931461d0d4662f0751ec6a460f");
       const serverUrl = url.toString();
 
       const transport = new StreamableHTTPClientTransport(serverUrl);
