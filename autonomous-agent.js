@@ -79,9 +79,9 @@ class AutonomousHealthcareAgent {
     // EXA API key for real healthcare practice discovery
     this.exaApiKey = process.env.EXA_API_KEY || this.throwMissingEnvError('EXA_API_KEY');
     
-    // MCP clients (initialized on first use)
+    // Railway MCP client (initialized on first use)
     this.railwayMCPClient = null;
-    this.elevenLabsMCPClient = null;
+    // Note: ElevenLabs now uses direct REST API calls instead of MCP
   }
 
   setupMiddleware() {
@@ -685,8 +685,7 @@ class AutonomousHealthcareAgent {
 
   async createElevenLabsAgent(practiceData) {
     try {
-      console.log(`   🔗 Connecting to ElevenLabs MCP...`);
-      const client = await this.initializeElevenLabsMCP();
+      console.log(`   🔗 Connecting to ElevenLabs REST API...`);
       
       // Generate practice-specific prompt and first message
       const systemPrompt = this.generatePracticeSpecificPrompt(practiceData);
@@ -694,36 +693,55 @@ class AutonomousHealthcareAgent {
         ? `Thank you for calling ${practiceData.company}! This is your wellness assistant. Our experienced medical team is here to help you begin your healing journey. Which of our ${practiceData.practiceType} treatments can I help you schedule today?`
         : `Thank you for calling ${practiceData.company}! This is your wellness assistant. We're here to help you begin your healing journey with ${practiceData.contactName}. Which of our ${practiceData.practiceType} treatments can I help you schedule today?`;
       
-      console.log(`   🎯 Creating ElevenLabs agent for ${practiceData.company}...`);
+      console.log(`   🎯 Creating ElevenLabs agent via REST API for ${practiceData.company}...`);
       
-      // Use create_agent MCP tool
-      const result = await client.callTool("create_agent", {
+      // Direct ElevenLabs REST API call
+      const response = await axios.post('https://api.elevenlabs.io/v1/convai/agents/create', {
         name: `${practiceData.company} AI Assistant`,
-        first_message: firstMessage,
-        system_prompt: systemPrompt,
-        voice_id: "21m00Tcm4TlvDq8ikWAM", // Default ElevenLabs voice
-        language: "en",
-        llm: "gpt-4",
-        temperature: 0.7,
-        max_tokens: 150,
-        asr_quality: "high",
-        optimize_streaming_latency: 2,
-        stability: 0.8,
-        similarity_boost: 0.7,
-        turn_timeout: 10,
-        max_duration_seconds: 900,
-        record_voice: true,
-        retention_days: 30
+        conversation_config: {
+          agent: {
+            prompt: {
+              prompt: systemPrompt
+            },
+            first_message: firstMessage,
+            language: "en"
+          },
+          tts: {
+            voice_id: "21m00Tcm4TlvDq8ikWAM", // Default ElevenLabs voice
+            model: "eleven_turbo_v2_5",
+            stability: 0.8,
+            similarity_boost: 0.7,
+            optimize_streaming_latency: 2
+          },
+          asr: {
+            quality: "high"
+          },
+          turn: {
+            turn_timeout: 10000
+          }
+        },
+        platform_settings: {
+          max_duration_seconds: 900,
+          record_voice: true,
+          retention_days: 30
+        }
+      }, {
+        headers: {
+          'xi-api-key': this.config.elevenLabsApiKey,
+          'Content-Type': 'application/json'
+        }
       });
       
-      console.log(`   ✅ Created ElevenLabs agent: ${result.content[0].text}`);
+      const agentId = response.data.agent_id;
+      console.log(`   ✅ Created ElevenLabs agent via REST API: ${agentId}`);
       
-      // Extract agent ID from result
-      const agentData = JSON.parse(result.content[0].text);
-      return agentData.id || agentData.agent_id || `agent_${Date.now()}_${practiceData.practiceId}`;
+      return agentId;
       
     } catch (error) {
-      console.log(`   ❌ ElevenLabs MCP failed: ${error.message}`);
+      console.log(`   ❌ ElevenLabs REST API failed: ${error.message}`);
+      if (error.response) {
+        console.log(`   📋 API Error Details: ${error.response.status} - ${JSON.stringify(error.response.data)}`);
+      }
       console.log(`   ⚠️ ElevenLabs fallback: Using master agent`);
       return this.config.masterAgentId;
     }
@@ -980,58 +998,6 @@ class AutonomousHealthcareAgent {
     }
   }
 
-  async initializeElevenLabsMCP() {
-    if (this.elevenLabsMCPClient) {
-      return this.elevenLabsMCPClient; // Already initialized
-    }
-
-    try {
-      console.log(`   🔗 Initializing ElevenLabs MCP client...`);
-      
-      // Import MCP SDK dynamically
-      const { StreamableHTTPClientTransport } = await import("@modelcontextprotocol/sdk/client/streamableHttp.js");
-      const { Client } = await import("@modelcontextprotocol/sdk/client/index.js");
-
-      // Construct server URL with authentication
-      const url = new URL("https://server.smithery.ai/@elevenlabs/elevenlabs-mcp/mcp");
-      url.searchParams.set("api_key", "2f9f056b-67dc-47e1-b6c4-79c41bf85d07");
-      url.searchParams.set("profile", "zesty-clam-4hb4aa");
-      url.searchParams.set("elevenlabs_api_key", "sk_682da5dc69d0e1c65a6dc5931461d0d4662f0751ec6a460f");
-      const serverUrl = url.toString();
-
-      const transport = new StreamableHTTPClientTransport(serverUrl);
-
-      // Create MCP client
-      const client = new Client({
-        name: "ElevenLabs Healthcare Agent",
-        version: "1.0.0"
-      });
-
-      console.log(`   ⏳ Connecting to ElevenLabs MCP (with 10s timeout)...`);
-      
-      // Add timeout to prevent Railway container hanging
-      const connectWithTimeout = Promise.race([
-        client.connect(transport),
-        new Promise((_, reject) => 
-          setTimeout(() => reject(new Error("Connection timeout after 10s")), 10000)
-        )
-      ]);
-      
-      await connectWithTimeout;
-      console.log(`   ✅ Connected to ElevenLabs MCP server`);
-
-      // List available tools for debugging
-      const tools = await client.listTools();
-      console.log(`   📋 Available ElevenLabs tools: ${tools.tools.map(t => t.name).join(", ")}`);
-
-      this.elevenLabsMCPClient = client;
-      return client;
-      
-    } catch (error) {
-      console.log(`   ❌ ElevenLabs MCP initialization failed: ${error.message}`);
-      throw error;
-    }
-  }
 
   async railwayMCPCreateProject(name) {
     try {
