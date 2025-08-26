@@ -1938,9 +1938,9 @@ NODE_ENV=production`;
   extractWorkflowParameters(userMessage) {
     const text = userMessage.toLowerCase();
     
-    // Extract count (numbers in the message)
+    // Extract count (numbers in the message) - NO LIMITS
     const countMatch = text.match(/(\d+)/);
-    const count = countMatch ? Math.min(parseInt(countMatch[1]), 10) : 3; // Max 10 for safety
+    const count = countMatch ? parseInt(countMatch[1]) : 3;
     
     // Extract healthcare type
     let type = 'healthcare practices';
