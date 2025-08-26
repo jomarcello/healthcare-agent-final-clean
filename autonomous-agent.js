@@ -1007,7 +1007,17 @@ class AutonomousHealthcareAgent {
         version: "1.0.0"
       });
 
-      await client.connect(transport);
+      console.log(`   ⏳ Connecting to ElevenLabs MCP (with 10s timeout)...`);
+      
+      // Add timeout to prevent Railway container hanging
+      const connectWithTimeout = Promise.race([
+        client.connect(transport),
+        new Promise((_, reject) => 
+          setTimeout(() => reject(new Error("Connection timeout after 10s")), 10000)
+        )
+      ]);
+      
+      await connectWithTimeout;
       console.log(`   ✅ Connected to ElevenLabs MCP server`);
 
       // List available tools for debugging
