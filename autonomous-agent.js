@@ -2017,7 +2017,16 @@ Keep responses concise and helpful. If they want to generate leads, tell them yo
                         userText.includes('start') ||
                         userText.includes('automation') ||
                         userText.includes('workflow') ||
-                        userText.includes('practice');
+                        userText.includes('practice') ||
+                        userText.includes('find') ||
+                        userText.includes('clinic') ||
+                        userText.includes('hospital') ||
+                        userText.includes('medical') ||
+                        userText.includes('cosmetic') ||
+                        userText.includes('aesthetic') ||
+                        userText.includes('spa') ||
+                        userText.includes('dermatology') ||
+                        userText.includes('dentist');
       
       console.log(chalk.yellow(`🔍 Intent detection: wantsLeads=${wantsLeads}, userMessage="${userMessage}"`));
       
