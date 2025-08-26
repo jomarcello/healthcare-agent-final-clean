@@ -1836,12 +1836,19 @@ NODE_ENV=production`;
   }
 
   async handleTelegramUpdate(update) {
-    if (!update.message) return;
-    
-    const chatId = update.message.chat.id;
-    const text = update.message.text;
-    
-    console.log(chalk.yellow(`📱 Telegram message from ${chatId}: ${text}`));
+    try {
+      console.log(chalk.blue(`🔍 DEBUG: Received update:`, JSON.stringify(update, null, 2)));
+      
+      if (!update.message) {
+        console.log(chalk.yellow(`⚠️ No message in update, skipping`));
+        return;
+      }
+      
+      const chatId = update.message.chat.id;
+      const text = update.message.text;
+      
+      console.log(chalk.yellow(`📱 Telegram message from ${chatId}: ${text}`));
+      console.log(chalk.blue(`🔍 Processing message...`));
     
     // Handle commands
     if (text === '/start') {
@@ -1912,7 +1919,19 @@ NODE_ENV=production`;
       }
     } else {
       // 🤖 AI CHAT MODE - Process natural language with OpenRouter
+      console.log(chalk.green(`🤖 Triggering AI Chat for: "${text}"`));
       await this.handleAIChat(chatId, text);
+    }
+    
+    } catch (error) {
+      console.error(chalk.red(`❌ TELEGRAM ERROR in handleTelegramUpdate:`), error);
+      try {
+        await this.sendTelegramMessage(update.message.chat.id, 
+          `🤖 Sorry, I encountered an error processing your message. Please try /help for commands.`
+        );
+      } catch (sendError) {
+        console.error(chalk.red(`❌ Failed to send error message:`), sendError);
+      }
     }
   }
 
