@@ -182,11 +182,11 @@ class AutonomousHealthcareAgent {
     // Main trigger endpoint
     this.app.post('/create-leads', async (req, res) => {
       try {
-        const { count = 1 } = req.body;
+        const { count = 1, location = null } = req.body;
         
-        console.log(chalk.cyan(`🤖 AUTONOMOUS TRIGGER: Creating ${count} healthcare leads`));
+        console.log(chalk.cyan(`🤖 AUTONOMOUS TRIGGER: Creating ${count} healthcare leads${location ? ` in ${location}` : ''}`));
         
-        const results = await this.executeAutonomousWorkflow(count);
+        const results = await this.executeAutonomousWorkflow(count, location);
         
         res.json({
           success: true,
@@ -278,16 +278,16 @@ class AutonomousHealthcareAgent {
     });
   }
 
-  async executeAutonomousWorkflow(leadCount) {
+  async executeAutonomousWorkflow(leadCount, location = null) {
     console.log(chalk.blue('🚀 Starting Autonomous Healthcare Agent Workflow'));
-    console.log(chalk.blue(`🎯 Target: ${leadCount} healthcare leads`));
+    console.log(chalk.blue(`🎯 Target: ${leadCount} healthcare leads${location ? ` in ${location}` : ''}`));
     console.log('');
 
     const results = [];
     
     // Step 1: Use EXA to find healthcare practices
-    console.log(chalk.cyan(`🔍 STEP 1: Using EXA Search to find ${leadCount} healthcare practices`));
-    const healthcarePractices = await this.findHealthcarePracticesWithEXA(leadCount);
+    console.log(chalk.cyan(`🔍 STEP 1: Using EXA Search to find ${leadCount} healthcare practices${location ? ` in ${location}` : ''}`));
+    const healthcarePractices = await this.findHealthcarePracticesWithEXA(leadCount, location);
     
     if (!healthcarePractices || healthcarePractices.length === 0) {
       throw new Error('No healthcare practices found with EXA search');
@@ -418,11 +418,12 @@ class AutonomousHealthcareAgent {
     }
   }
 
-  async findHealthcarePracticesWithEXA(count) {
-    console.log(`   🔍 EXA Search: Finding ${count} healthcare practices globally`);
+  async findHealthcarePracticesWithEXA(count, location = null) {
+    const locationQuery = location ? ` in ${location}` : '';
+    console.log(`   🔍 EXA Search: Finding ${count} healthcare practices${location ? ` in ${location}` : ' globally'}`);
     
     try {
-      // EXA Search for healthcare practices
+      // EXA Search for healthcare practices with location targeting
       const response = await fetch('https://api.exa.ai/search', {
         method: 'POST',
         headers: {
@@ -430,12 +431,12 @@ class AutonomousHealthcareAgent {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          query: 'aesthetic clinic cosmetic surgery medical spa beauty clinic',
+          query: `aesthetic clinic cosmetic surgery medical spa beauty clinic dermatology practice${locationQuery}`,
           numResults: count,
           type: 'auto',
           useAutoprompt: true,
           category: 'company',
-          includeDomains: []  // Let EXA find practices globally
+          includeDomains: []  // Let EXA find practices with location targeting
         })
       });
 
@@ -1360,14 +1361,24 @@ class AutonomousHealthcareAgent {
   }
 
   extractCompanyFromDomain(domain) {
-    const name = domain
+    // Smart practice name extraction without automatic "Clinic" suffix
+    let name = domain
       .replace(/^www\./, '')
-      .replace(/\.(com|co\.uk|org|net)$/, '')
+      .replace(/\.(com|co\.uk|org|net|ca|au|de|nl|fr)$/, '')  // Extended TLD support
       .split(/[-.]/)
+      .filter(part => part.length > 0)  // Remove empty parts
       .map(word => word.charAt(0).toUpperCase() + word.slice(1))
       .join(' ');
     
-    return `${name} Clinic`;
+    // Only add "Clinic" if the name doesn't already contain medical terms
+    const medicalTerms = ['clinic', 'medical', 'health', 'surgery', 'dental', 'dermatology', 'spa', 'center', 'practice', 'hospital', 'care'];
+    const hasmedicalTerm = medicalTerms.some(term => name.toLowerCase().includes(term));
+    
+    if (!hasmedicalTerm) {
+      name += ' Clinic';
+    }
+    
+    return name;
   }
 
 
@@ -2113,14 +2124,28 @@ NODE_ENV=production`;
     if (text.includes('spa')) type = 'medical spas';
     if (text.includes('hospital')) type = 'hospitals';
     
-    // Extract location
+    // Extract location - improved handling
     let location = 'globally';
     const locationWords = ['in', 'from', 'at', 'near'];
     for (const word of locationWords) {
       const index = text.indexOf(` ${word} `);
       if (index !== -1) {
-        location = text.substring(index + word.length + 2).trim();
-        break;
+        // Extract everything after the location word, but clean it up
+        let extractedLocation = text.substring(index + word.length + 2).trim();
+        
+        // Take only the next few words (assume location is 1-3 words)
+        const locationParts = extractedLocation.split(' ').slice(0, 3);
+        
+        // Stop at common words that indicate end of location
+        const stopWords = ['find', 'get', 'search', 'generate', 'create', 'clinic', 'hospital', 'practice'];
+        let cleanLocation = [];
+        for (const part of locationParts) {
+          if (stopWords.includes(part.toLowerCase())) break;
+          cleanLocation.push(part);
+        }
+        
+        location = cleanLocation.join(' ').trim();
+        if (location) break;
       }
     }
     
@@ -2234,7 +2259,7 @@ Keep responses concise and helpful. If they want to generate leads, tell them yo
         );
         
         try {
-          const results = await this.executeAutonomousWorkflow(params.count);
+          const results = await this.executeAutonomousWorkflow(params.count, params.location !== 'globally' ? params.location : null);
           const successful = results.filter(r => r.status === 'success').length;
           
           await this.sendTelegramMessage(chatId, 
