@@ -781,8 +781,9 @@ class AutonomousHealthcareAgent {
     const repoPath = `/tmp/${repository.name}`;
     
     try {
-      // Clone repository
-      execSync(`git clone ${repository.clone_url} ${repoPath}`, { stdio: 'ignore' });
+      // Clone repository with authentication
+      const authenticatedUrl = repository.clone_url.replace('https://github.com/', `https://${this.config.githubToken}@github.com/`);
+      execSync(`git clone ${authenticatedUrl} ${repoPath}`, { stdio: 'ignore' });
       
       // Generate complete AI Voice Agent healthcare template inline
       await this.generateCompleteTemplate(repoPath, practiceData, agentId);
