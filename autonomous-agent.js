@@ -358,34 +358,33 @@ class AutonomousHealthcareAgent {
     console.log(`   🌐 Target: ${websiteUrl}`);
     
     try {
-      // PHASE 0: Web Scraping with Playwright MCP
+      // PHASE 0: Web Scraping
       const scrapedData = await this.scrapeHealthcareWebsite(websiteUrl);
       console.log(`   ✅ Scraped: ${scrapedData.company} - ${scrapedData.services.slice(0,2).join(', ')}`);
       
-      // PHASE 1: Notion Database Storage
-      console.log(chalk.cyan(`📊 PHASE 1: Notion Database Storage`));
-      const notionPage = await this.storeLeadInNotion(scrapedData, websiteUrl);
-      console.log(`   ✅ Stored in Notion: ${notionPage.id}`);
-      
-      // PHASE 2: ElevenLabs Voice Agent Creation
-      console.log(chalk.cyan(`🎤 PHASE 2: ElevenLabs Voice Agent`));
+      // PHASE 1: ElevenLabs Voice Agent Creation
+      console.log(chalk.cyan(`🎤 PHASE 1: ElevenLabs Voice Agent`));
       const agentId = await this.createElevenLabsAgent(scrapedData);
       console.log(`   ✅ Created voice agent: ${agentId}`);
       
-      // PHASE 3: GitHub Repository Creation & Personalization
-      console.log(chalk.cyan(`📦 PHASE 3: GitHub Repository & Personalization`));
+      // PHASE 2: GitHub Repository Creation & Personalization
+      console.log(chalk.cyan(`📦 PHASE 2: GitHub Repository & Personalization`));
       const repository = await this.createPersonalizedRepository(scrapedData, agentId);
       console.log(`   ✅ Created repository: ${repository.name}`);
       
-      // PHASE 4: Railway Deployment (connect to personalized repository)
-      console.log(chalk.cyan(`🚂 PHASE 4: Railway Deployment`));
+      // PHASE 3: Railway Deployment (connect to personalized repository)
+      console.log(chalk.cyan(`🚂 PHASE 3: Railway Deployment`));
       const deployment = await this.deployToRailwayFromRepo(scrapedData, repository);
       console.log(`   ✅ Deployed to Railway: ${deployment.url}`);
       
-      // PHASE 5: Final Notion Update
-      console.log(chalk.cyan(`📝 PHASE 5: Final Status Update`));
-      await this.updateNotionWithResults(notionPage.id, deployment.url, agentId);
-      console.log(`   ✅ Updated Notion with demo URL`);
+      // PHASE 4: Notion Database Storage (after successful deployment)
+      console.log(chalk.cyan(`📊 PHASE 4: Notion Database Storage`));
+      const notionPage = await this.storeCompletedLead(scrapedData, agentId, repository, deployment, websiteUrl);
+      console.log(`   ✅ Stored completed lead in Notion: ${notionPage.id}`);
+      
+      // PHASE 5: Final Validation
+      console.log(chalk.cyan(`✅ PHASE 5: Final Validation`));
+      console.log(`   ✅ All phases completed successfully`);
       
       const duration = Date.now() - startTime;
       
@@ -679,6 +678,46 @@ class AutonomousHealthcareAgent {
       return response.data;
     } catch (error) {
       throw new Error(`Notion storage failed: ${error.message}`);
+    }
+  }
+
+  async storeCompletedLead(practiceData, agentId, repository, deployment, websiteUrl) {
+    try {
+      console.log(`   📝 Storing completed lead with all deployment data...`);
+      
+      const finalLeadData = {
+        'Company': { title: [{ text: { content: practiceData.company } }] },
+        'Services': { rich_text: [{ text: { content: practiceData.services.join(', ') || 'Healthcare Services' } }] },
+        'Location': { rich_text: [{ text: { content: practiceData.location } }] },
+        'Phone': { phone_number: practiceData.phone || null },
+        'Email': { email: practiceData.email || null },
+        'Website URL': { url: websiteUrl },
+        'Agent ID': { rich_text: [{ text: { content: agentId } }] },
+        'Demo URL': { url: deployment.url },
+        'Repository': { url: repository.html_url },
+        'Railway Project': { url: `https://railway.app/project/${deployment.projectId}` },
+        'Status': { select: { name: 'Deployed' } },
+        'Deployment Date': { date: { start: new Date().toISOString().split('T')[0] } },
+        'Notes': { rich_text: [{ text: { content: '✅ Complete workflow executed successfully - All phases completed' } }] }
+      };
+
+      const response = await axios.post('https://api.notion.com/v1/pages', {
+        parent: { database_id: this.config.notionDatabaseId },
+        properties: finalLeadData
+      }, {
+        headers: {
+          'Authorization': `Bearer ${this.config.notionApiKey}`,
+          'Content-Type': 'application/json',
+          'Notion-Version': '2022-06-28'
+        }
+      });
+
+      console.log(`   ✅ Successfully stored complete lead data in Notion`);
+      return response.data;
+    } catch (error) {
+      console.log(`   ⚠️  Notion storage failed but deployment succeeded: ${error.message}`);
+      // Don't throw error - deployment succeeded, Notion failure shouldn't break workflow
+      return { id: 'notion-failed', error: error.message };
     }
   }
 

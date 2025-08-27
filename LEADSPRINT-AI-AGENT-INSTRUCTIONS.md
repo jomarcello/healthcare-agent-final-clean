@@ -232,27 +232,7 @@ const scrapedData = {
 
 ---
 
-## 🏗️ PHASE 1: NOTION DATABASE STORAGE
-
-**Purpose**: Store lead data for tracking and management
-
-**Database Schema**: Uses existing Demo Leads Database
-```javascript
-const notionEntry = {
-  'Practice Name': scrapedData.company,
-  'Location': scrapedData.location,
-  'Services': scrapedData.services.join(', '),
-  'Status': 'Voice Agent Created',
-  'Demo URL': 'Pending Repository Creation',
-  'Voice Agent ID': agentResult.agent_id,
-  'Repository': 'Pending',
-  'Railway Project': 'Pending'
-};
-```
-
----
-
-## 🏗️ PHASE 2: ELEVENLABS VOICE AGENT CREATION
+## 🏗️ PHASE 1: ELEVENLABS VOICE AGENT CREATION
 
 **Purpose**: Create voice agent with practice-specific prompts
 
@@ -289,7 +269,7 @@ conversation_config: {
 
 ---
 
-## 🏗️ PHASE 3: GITHUB REPOSITORY CREATION
+## 🏗️ PHASE 2: GITHUB REPOSITORY CREATION
 
 **Purpose**: Create personalized healthcare demo repository
 
@@ -508,7 +488,7 @@ async createPersonalizedRepository(practiceData, agentId) {
 
 ---
 
-## 🏗️ PHASE 4: RAILWAY DEPLOYMENT
+## 🏗️ PHASE 3: RAILWAY DEPLOYMENT
 
 **Purpose**: Deploy healthcare demo to Railway with custom domain
 
@@ -590,9 +570,43 @@ PORT=8080
 
 ---
 
+## 🏗️ PHASE 4: NOTION DATABASE STORAGE
+
+**Purpose**: Store complete lead data in Notion after successful deployment
+
+### 📊 FINAL NOTION UPDATE
+
+**Only after complete successful deployment**, create the Notion entry:
+
+```javascript
+async storeCompletedLead(practiceData, agentId, repository, deployment) {
+  const finalLeadData = {
+    'Practice Name': practiceData.company,
+    'Location': practiceData.location,
+    'Services': practiceData.services.join(', '),
+    'Demo URL': deployment.url,
+    'Repository': repository.html_url,
+    'ElevenLabs Agent ID': agentId,
+    'Railway Project': `https://railway.app/project/${deployment.projectId}`,
+    'Status': 'Deployed',
+    'Deployment Date': new Date().toISOString(),
+    'Phone': practiceData.phone || '',
+    'Email': practiceData.email || '',
+    'Notes': '✅ Complete workflow executed successfully'
+  };
+  
+  // Create Notion page only after everything is working
+  await this.notionCreatePage(finalLeadData);
+}
+```
+
+**Critical**: This phase only executes if all previous phases completed successfully.
+
+---
+
 ## 🏗️ PHASE 5: FINAL INTEGRATION & TESTING
 
-**Purpose**: Validate complete deployment and update tracking
+**Purpose**: Validate complete deployment and confirm functionality
 
 ### ✅ DEPLOYMENT VALIDATION
 
@@ -602,19 +616,7 @@ PORT=8080
 4. **Chat Functionality**: Validate OpenAI chat API responses
 5. **Responsive Design**: Check mobile/desktop layouts
 
-### 📋 NOTION DATABASE UPDATE
-
-```javascript
-// Final update with deployment results
-const finalUpdate = {
-  'Status': 'Deployed',
-  'Demo URL': `https://${domain.domain}`,
-  'Repository': repository.html_url,
-  'Railway Project': `https://railway.app/project/${project.id}`,
-  'Deployment Date': new Date().toISOString(),
-  'Notes': '✅ Complete delta-clinics template replication'
-};
-```
+**Note**: Notion database storage is handled in Phase 4 after successful deployment validation.
 
 ---
 
@@ -627,11 +629,11 @@ This complete workflow is triggered by:
 
 **Complete Execution**:
 1. **Phase 0**: Scrape practice data → Extract name, services, location (**NO DOCTOR**)
-2. **Phase 1**: Store in Notion → Create tracking entry
-3. **Phase 2**: Create voice agent → Apply template with scraped data → Return `agentId`
-4. **Phase 3**: Generate repository → 1:1 delta-clinics template + voice agent ID
-5. **Phase 4**: Deploy to Railway → MCP deployment + voice agent environment variable
-6. **Phase 5**: Validate & update → Confirm deployment + voice integration success
+2. **Phase 1**: Create voice agent → Apply template with scraped data → Return `agentId`
+3. **Phase 2**: Generate repository → 1:1 delta-clinics template + voice agent ID
+4. **Phase 3**: Deploy to Railway → MCP deployment + voice agent environment variable
+5. **Phase 4**: Store in Notion → Create tracking entry with deployment results
+6. **Phase 5**: Final validation → Confirm deployment + voice integration success
 
 **Result**: Complete healthcare demo deployed at custom Railway domain with:
 - ✅ Practice-specific branding and content
@@ -735,10 +737,10 @@ The voice agent integration is verified by:
 **Template Integration Points**:
 
 1. **Phase 0**: Website scraping extracts practice data
-2. **Phase 1**: Data stored in Notion database  
-3. **Phase 2**: **Voice Agent Creation** ← Voice template applied here
-4. **Phase 3**: GitHub repository creation ← Delta-clinics template applied here
-5. **Phase 4**: Railway deployment ← Environment variables applied here
-6. **Phase 5**: Final validation and updates
+2. **Phase 1**: **Voice Agent Creation** ← Voice template applied here
+3. **Phase 2**: GitHub repository creation ← Delta-clinics template applied here
+4. **Phase 3**: Railway deployment ← Environment variables applied here  
+5. **Phase 4**: Data stored in Notion database ← Final storage after deployment
+6. **Phase 5**: Final validation and testing
 
 The agent dynamically fills in all `[field_name]` placeholders with actual scraped data before sending to ElevenLabs API.
