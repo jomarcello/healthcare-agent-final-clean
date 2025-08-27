@@ -197,14 +197,548 @@ conversation_config: {
 
 ---
 
+## 🚀 COMPLETE IMPLEMENTATION WORKFLOW
+
+### 📋 DELTA CLINICS TEMPLATE - EXACT REPLICATION
+
+The LeadSprint agent uses the **delta-clinics-demo** as the exact template. Only variable data changes per lead:
+- **Practice name** (e.g., "Delta Clinics" → "Advanced Spine Care")
+- **Treatments/Services** (extracted from scraped website)
+- **Location/Address** (extracted from scraped website)
+
+**IMPORTANT**: Doctor names are NO LONGER used - only practice name and treatments.
+
+---
+
+## 🏗️ PHASE 0: WEBSITE SCRAPING & DATA EXTRACTION
+
+**Purpose**: Extract practice-specific data from healthcare website
+
+**Implementation**: Uses EXA API search + direct web scraping
+```javascript
+const scrapedData = {
+  practiceId: 'delta-clinics',           // URL-safe identifier
+  company: 'Delta Clinics',              // Practice name
+  location: '96 Harley Street, London', // Full address
+  services: [
+    'Cosmetic Surgery',
+    'Non-Surgical Treatments', 
+    'Aesthetic Procedures'
+  ],
+  phone: '+44 20 7xxx xxxx',            // If found
+  email: 'info@deltaclinics.com'        // If found
+};
+```
+
+---
+
+## 🏗️ PHASE 1: NOTION DATABASE STORAGE
+
+**Purpose**: Store lead data for tracking and management
+
+**Database Schema**: Uses existing Demo Leads Database
+```javascript
+const notionEntry = {
+  'Practice Name': scrapedData.company,
+  'Location': scrapedData.location,
+  'Services': scrapedData.services.join(', '),
+  'Status': 'Voice Agent Created',
+  'Demo URL': 'Pending Repository Creation',
+  'Voice Agent ID': agentResult.agent_id,
+  'Repository': 'Pending',
+  'Railway Project': 'Pending'
+};
+```
+
+---
+
+## 🏗️ PHASE 2: ELEVENLABS VOICE AGENT CREATION
+
+**Purpose**: Create voice agent with practice-specific prompts
+
+**Template Application**: Dynamic field replacement in voice agent template
+```javascript
+// Replace template variables with scraped data
+const systemPrompt = voiceAgentTemplate
+  .replace(/\[practice_name\]/g, scrapedData.company)
+  .replace(/\[practice_address\]/g, scrapedData.location)
+  .replace(/\[treatment_1\]/g, scrapedData.services[0])
+  .replace(/\[treatment_2\]/g, scrapedData.services[1])
+  .replace(/\[treatment_3\]/g, scrapedData.services[2] || 'Consultation');
+```
+
+**ElevenLabs API Configuration**:
+```javascript
+conversation_config: {
+  agent: {
+    prompt: { prompt: systemPrompt },
+    first_message: `Hi! Welcome to ${scrapedData.company}. I'm here to help you book your appointment. Which treatment interests you today?`,
+    language: "en"
+  },
+  tts: {
+    voice_id: "21m00Tcm4TlvDq8ikWAM",
+    model: "eleven_turbo_v2_5", 
+    stability: 0.8,
+    similarity_boost: 0.7,
+    optimize_streaming_latency: 2
+  },
+  asr: { quality: "high" },
+  turn: { turn_timeout: 10 }  // CRITICAL: 10 seconds, NOT 10000ms
+}
+```
+
+---
+
+## 🏗️ PHASE 3: GITHUB REPOSITORY CREATION
+
+**Purpose**: Create personalized healthcare demo repository
+
+### 📁 EXACT REPOSITORY STRUCTURE (Delta Clinics Template)
+
+```
+{practice-id}-demo-{timestamp}/
+├── package.json                    # Next.js project configuration
+├── next.config.ts                  # Next.js build configuration  
+├── tsconfig.json                   # TypeScript configuration
+├── tailwind.config.js              # Tailwind CSS with healthcare theme
+├── postcss.config.mjs              # PostCSS configuration
+├── railway.toml                    # Railway deployment configuration
+├── .env.local                      # Environment variables (local)
+├── public/
+│   └── (static assets)
+└── src/
+    ├── app/
+    │   ├── layout.tsx              # Root layout with metadata
+    │   ├── page.tsx                # Main demo page
+    │   ├── globals.css             # Global styles
+    │   └── api/
+    │       └── chat/
+    │           └── route.ts        # AI chat API endpoint
+    └── lib/
+        └── practice-config.ts      # Practice-specific configuration
+```
+
+### 📄 CRITICAL FILES - EXACT IMPLEMENTATION
+
+#### 1. **package.json** - Next.js Healthcare Demo
+```json
+{
+  "name": "{practice-id}-demo",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build", 
+    "start": "next start",
+    "lint": "next lint"
+  },
+  "dependencies": {
+    "react": "19.0.0",
+    "react-dom": "19.0.0",
+    "next": "15.3.3",
+    "lucide-react": "^0.263.1",
+    "axios": "^1.9.0",
+    "openai": "^4.75.1"
+  },
+  "devDependencies": {
+    "typescript": "^5",
+    "@types/node": "^20",
+    "@types/react": "^18",
+    "@types/react-dom": "^18",
+    "autoprefixer": "^10.0.1",
+    "postcss": "^8",
+    "tailwindcss": "^3.4.0",
+    "eslint": "^8",
+    "eslint-config-next": "15.3.3"
+  }
+}
+```
+
+#### 2. **src/lib/practice-config.ts** - Practice Configuration
+```typescript
+export interface PracticeConfig {
+  id: string;
+  name: string;
+  location: string;
+  type: 'cosmetic' | 'chiropractic' | 'wellness' | 'beauty';
+  chat: {
+    assistantName: string;
+    initialMessage: string;
+    systemPrompt: string;
+  };
+  services: string[];
+  primaryColor: string;
+  tagline: string;
+  elevenLabsAgentId: string;  // NEW: ElevenLabs voice agent integration
+}
+
+export const practiceConfigs: Record<string, PracticeConfig> = {
+  '{practice-id}': {
+    id: '{practice-id}',
+    name: '{practice-name}',
+    location: '{practice-address}',
+    type: 'cosmetic',
+    chat: {
+      assistantName: '{practice-name} Assistant',
+      initialMessage: 'Hello! How can I help you with your {treatment-1} needs today?',
+      systemPrompt: 'You are a professional appointment scheduler for {practice-name}...'
+    },
+    services: ['{treatment-1}', '{treatment-2}', '{treatment-3}'],
+    primaryColor: '#0066cc',
+    tagline: 'Professional {treatment-1} Excellence',
+    elevenLabsAgentId: '{elevenlabs-agent-id}'  // Linked to created voice agent
+  }
+};
+```
+
+#### 3. **src/app/page.tsx** - Main Demo Page (1:1 Copy)
+- **Complete React component** with practice configuration
+- **Dynamic theming** based on practice colors
+- **Interactive voice and chat demos**
+- **Responsive design** with Tailwind CSS
+- **Practice-specific content** via configuration
+- **🎤 ElevenLabs Voice Agent Integration**: Uses `config.elevenLabsAgentId` for seamless voice demo connection
+
+#### 4. **src/app/layout.tsx** - Root Layout
+```typescript
+import { Metadata } from 'next';
+import { practiceConfigs } from '@/lib/practice-config';
+
+export async function generateMetadata(): Promise<Metadata> {
+  const practiceId = process.env.NEXT_PUBLIC_PRACTICE_ID || '{practice-id}';
+  const config = practiceConfigs[practiceId];
+  
+  return {
+    title: `${config.name} - AI Voice Assistant Demo`,
+    description: `Experience ${config.name}'s advanced AI voice assistant for ${config.services[0]} appointments.`,
+    keywords: config.services.join(', '),
+    openGraph: {
+      title: `${config.name} - AI Voice Assistant`,
+      description: `Book your ${config.services[0]} appointment at ${config.name}`,
+      url: `https://{domain}`,
+      siteName: config.name,
+      locale: 'en_US',
+      type: 'website'
+    }
+  };
+}
+```
+
+#### 5. **src/app/api/chat/route.ts** - AI Chat API
+- **OpenAI GPT-4o-mini integration**
+- **Practice detection** via environment variables
+- **Dynamic context switching** per practice
+- **Robust error handling**
+
+#### 6. **tailwind.config.js** - Healthcare Styling System
+```javascript
+module.exports = {
+  content: [
+    './src/pages/**/*.{js,ts,jsx,tsx,mdx}',
+    './src/components/**/*.{js,ts,jsx,tsx,mdx}',
+    './src/app/**/*.{js,ts,jsx,tsx,mdx}',
+    './src/lib/**/*.{js,ts,jsx,tsx,mdx}'
+  ],
+  safelist: [
+    // Healthcare color gradients
+    'from-blue-500', 'to-blue-700', 'from-green-500', 'to-green-700',
+    'from-purple-500', 'to-purple-700', 'from-pink-500', 'to-pink-700',
+    // Comprehensive utility classes for dynamic generation
+    'bg-blue-500', 'bg-green-500', 'bg-purple-500', 'bg-pink-500',
+    'text-blue-600', 'text-green-600', 'text-purple-600', 'text-pink-600',
+    'hover:bg-blue-700', 'hover:bg-green-700', 'hover:bg-purple-700'
+  ],
+  theme: {
+    extend: {
+      colors: {
+        primary: '#0066cc',
+        secondary: '#004499', 
+        accent: '#0080ff',
+        success: '#10b981',
+        warning: '#f59e0b',
+        error: '#ef4444'
+      },
+      fontFamily: {
+        sans: ['var(--font-geist-sans)', 'Inter', 'system-ui'],
+        mono: ['var(--font-geist-mono)', 'monospace']
+      }
+    }
+  },
+  plugins: []
+};
+```
+
+### 🔧 REPOSITORY CREATION PROCESS
+
+```javascript
+async createPersonalizedRepository(practiceData, agentId) {
+  const timestamp = Date.now();
+  const repoName = `${practiceData.practiceId}-demo-${timestamp}`;
+  
+  // 1. Create GitHub repository
+  const repoResponse = await axios.post('https://api.github.com/user/repos', {
+    name: repoName,
+    description: `Personalized healthcare demo for ${practiceData.company} - Auto-generated`,
+    private: false,
+    auto_init: true
+  }, {
+    headers: {
+      'Authorization': `Bearer ${process.env.GITHUB_TOKEN}`,
+      'Accept': 'application/vnd.github.v3+json'
+    }
+  });
+  
+  // 2. Clone and personalize with delta-clinics template
+  const repoPath = `/tmp/${repository.name}`;
+  const authenticatedUrl = repository.clone_url.replace('https://github.com/', 
+    `https://${process.env.GITHUB_TOKEN}@github.com/`);
+  execSync(`git clone ${authenticatedUrl} ${repoPath}`);
+  
+  // 3. Generate complete template (exact delta-clinics structure)
+  await this.generateCompleteTemplate(repoPath, practiceData, agentId);
+  
+  // 4. Commit and push
+  execSync(`cd ${repoPath} && git add .`);
+  execSync(`cd ${repoPath} && git commit -m "🚀 Healthcare AI Voice Agent: ${practiceData.company}"`);
+  execSync(`cd ${repoPath} && git push origin main`);
+  
+  return repository;
+}
+```
+
+---
+
+## 🏗️ PHASE 4: RAILWAY DEPLOYMENT
+
+**Purpose**: Deploy healthcare demo to Railway with custom domain
+
+### 🚂 RAILWAY DEPLOYMENT CONFIGURATION
+
+#### 1. **railway.toml** - Deployment Settings
+```toml
+[build]
+builder = "nixpacks"
+nixpacksConfigPath = "nixpacks.toml"
+
+[build.nixpacksConfig]
+install = "npm install"
+build = "npm run build"
+start = "npm start"
+
+[deploy]
+startCommand = "npm start"
+healthcheckPath = "/"
+healthcheckTimeout = 100
+restartPolicyType = "on_failure"
+restartPolicyMaxRetries = 3
+
+[[services]]
+name = "web"
+environment = "production"
+port = 8080
+```
+
+### 🔧 RAILWAY MCP DEPLOYMENT PROCESS
+
+```javascript
+async deployToRailwayFromRepo(practiceData, repository) {
+  // 1. Create Railway project using MCP
+  const project = await this.railwayMCPCreateProject(`${practiceData.practiceId}-demo`);
+  
+  // 2. Get production environment
+  const environments = await this.railwayMCPGetEnvironments(project.id);
+  const prodEnv = environments.find(env => env.name === 'production');
+  
+  // 3. Create service from GitHub repository  
+  const service = await this.railwayMCPCreateService(project.id, repository.full_name);
+  
+  // 4. Set environment variables
+  const variables = {
+    NEXT_PUBLIC_PRACTICE_ID: practiceData.practiceId,
+    NEXT_PUBLIC_COMPANY_NAME: practiceData.company,
+    NEXT_PUBLIC_PRACTICE_LOCATION: practiceData.location,
+    NEXT_PUBLIC_ELEVENLABS_AGENT_ID: agentId,  // NEW: Connect voice agent to demo
+    NODE_ENV: 'production'
+  };
+  await this.railwayMCPSetVariables(project.id, prodEnv.id, service.id, variables);
+  
+  // 5. Create custom domain
+  const domain = await this.railwayMCPCreateDomain(project.id, prodEnv.id, service.id);
+  
+  return {
+    url: `https://${domain.domain}`,
+    status: 'deployed',
+    projectId: project.id,
+    serviceId: service.id,
+    domain: domain.domain,
+    repositoryUrl: repository.html_url
+  };
+}
+```
+
+### 📊 ENVIRONMENT VARIABLES (Railway)
+
+**Critical Variables for Practice Personalization**:
+```bash
+NEXT_PUBLIC_PRACTICE_ID=delta-clinics
+NEXT_PUBLIC_COMPANY_NAME=Delta Clinics
+NEXT_PUBLIC_PRACTICE_LOCATION=96 Harley Street, London
+NEXT_PUBLIC_ELEVENLABS_AGENT_ID=ag_xxxxx  # Links demo to voice agent
+NODE_ENV=production
+PORT=8080
+```
+
+---
+
+## 🏗️ PHASE 5: FINAL INTEGRATION & TESTING
+
+**Purpose**: Validate complete deployment and update tracking
+
+### ✅ DEPLOYMENT VALIDATION
+
+1. **Demo Site Accessibility**: Verify `https://{domain}` loads correctly
+2. **Practice Personalization**: Confirm practice name, doctor, services display
+3. **Voice Agent Integration**: Test ElevenLabs voice agent functionality
+4. **Chat Functionality**: Validate OpenAI chat API responses
+5. **Responsive Design**: Check mobile/desktop layouts
+
+### 📋 NOTION DATABASE UPDATE
+
+```javascript
+// Final update with deployment results
+const finalUpdate = {
+  'Status': 'Deployed',
+  'Demo URL': `https://${domain.domain}`,
+  'Repository': repository.html_url,
+  'Railway Project': `https://railway.app/project/${project.id}`,
+  'Deployment Date': new Date().toISOString(),
+  'Notes': '✅ Complete delta-clinics template replication'
+};
+```
+
+---
+
+## 🎯 AUTOMATION WORKFLOW EXECUTION
+
+This complete workflow is triggered by:
+
+**API Endpoint**: `POST /create-leads`
+**Payload**: `{ "count": 1, "practice_url": "https://deltaclinics.com" }`
+
+**Complete Execution**:
+1. **Phase 0**: Scrape practice data → Extract name, services, location (**NO DOCTOR**)
+2. **Phase 1**: Store in Notion → Create tracking entry
+3. **Phase 2**: Create voice agent → Apply template with scraped data → Return `agentId`
+4. **Phase 3**: Generate repository → 1:1 delta-clinics template + voice agent ID
+5. **Phase 4**: Deploy to Railway → MCP deployment + voice agent environment variable
+6. **Phase 5**: Validate & update → Confirm deployment + voice integration success
+
+**Result**: Complete healthcare demo deployed at custom Railway domain with:
+- ✅ Practice-specific branding and content
+- ✅ Functional ElevenLabs voice agent
+- ✅ AI chat powered by OpenAI
+- ✅ Responsive design with practice colors
+- ✅ SEO optimized metadata
+- ✅ Professional healthcare UI/UX
+
+**Template Guarantee**: Every deployment uses exact delta-clinics structure with only variable data changed (practice name, treatments, location). **NO DOCTOR NAMES** - only clinic name and treatments.
+
+---
+
+## 🎤 ELEVENLABS VOICE AGENT SEAMLESS INTEGRATION
+
+### 🔗 **Voice Agent → Demo Site Connection**
+
+The created ElevenLabs voice agent is seamlessly integrated into the demo site:
+
+#### 1. **Agent ID Injection** 
+```javascript
+// During repository creation (Phase 3)
+const practiceConfig = {
+  id: practiceData.practiceId,
+  name: practiceData.company,
+  location: practiceData.location,
+  services: practiceData.services,
+  elevenLabsAgentId: agentId  // ← Voice agent ID from Phase 2
+};
+
+// Environment variable injection (Phase 4)
+const variables = {
+  NEXT_PUBLIC_ELEVENLABS_AGENT_ID: agentId  // ← Links demo to voice agent
+};
+```
+
+#### 2. **Demo Page Voice Integration**
+```javascript
+// In src/app/page.tsx - Voice Demo Component
+const VoiceDemo = () => {
+  const config = practiceConfigs[practiceId];
+  const agentId = config.elevenLabsAgentId;
+  
+  const startVoiceCall = () => {
+    // Direct connection to created ElevenLabs agent
+    window.ElevenLabs?.startConversation(agentId, {
+      onConnect: () => console.log('Connected to voice agent'),
+      onMessage: (message) => console.log('Voice message:', message)
+    });
+  };
+  
+  return (
+    <button onClick={startVoiceCall} className="voice-demo-btn">
+      🎤 Start Voice Demo with {config.name}
+    </button>
+  );
+};
+```
+
+#### 3. **Automatic Configuration Flow**
+1. **Phase 2**: Create ElevenLabs voice agent → Returns `agentId`
+2. **Phase 3**: Generate practice config → Include `elevenLabsAgentId: agentId`
+3. **Phase 4**: Set environment variable → `NEXT_PUBLIC_ELEVENLABS_AGENT_ID=agentId`
+4. **Runtime**: Demo page → Load config → Connect to voice agent
+
+#### 4. **Voice Agent Configuration Update**
+```javascript
+async generateCompleteTemplate(repoPath, practiceData, agentId) {
+  // Generate practice-config.ts with voice agent ID
+  const configContent = `
+export const practiceConfigs = {
+  '${practiceData.practiceId}': {
+    id: '${practiceData.practiceId}',
+    name: '${practiceData.company}',
+    location: '${practiceData.location}',
+    services: ${JSON.stringify(practiceData.services)},
+    elevenLabsAgentId: '${agentId}',  // ← Critical integration
+    primaryColor: '#0066cc',
+    tagline: 'Professional ${practiceData.services[0]} Excellence'
+  }
+};`;
+  
+  await fs.writeFile(`${repoPath}/src/lib/practice-config.ts`, configContent);
+}
+```
+
+### ✅ **Integration Verification**
+
+The voice agent integration is verified by:
+1. **Config File**: `src/lib/practice-config.ts` contains correct `elevenLabsAgentId`
+2. **Environment Variable**: `NEXT_PUBLIC_ELEVENLABS_AGENT_ID` is set in Railway
+3. **Demo Functionality**: Voice demo button connects to created agent
+4. **Practice Context**: Voice agent uses practice-specific prompts and data
+
+**Result**: Visitors to the demo site can immediately use the voice agent with practice-specific context and appointments scheduling functionality.
+
+---
+
 ## 🚀 WORKFLOW INTEGRATION
 
-This voice agent prompt template is automatically applied during:
+**Template Integration Points**:
 
 1. **Phase 0**: Website scraping extracts practice data
 2. **Phase 1**: Data stored in Notion database  
-3. **Phase 2**: **Voice Agent Creation** ← Template applied here
-4. **Phase 3**: GitHub repository creation
-5. **Phase 4**: Railway deployment
+3. **Phase 2**: **Voice Agent Creation** ← Voice template applied here
+4. **Phase 3**: GitHub repository creation ← Delta-clinics template applied here
+5. **Phase 4**: Railway deployment ← Environment variables applied here
+6. **Phase 5**: Final validation and updates
 
 The agent dynamically fills in all `[field_name]` placeholders with actual scraped data before sending to ElevenLabs API.

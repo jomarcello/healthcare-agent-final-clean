@@ -360,7 +360,7 @@ class AutonomousHealthcareAgent {
     try {
       // PHASE 0: Web Scraping with Playwright MCP
       const scrapedData = await this.scrapeHealthcareWebsite(websiteUrl);
-      console.log(`   ✅ Scraped: ${scrapedData.company} (${scrapedData.contactName})`);
+      console.log(`   ✅ Scraped: ${scrapedData.company} - ${scrapedData.services.slice(0,2).join(', ')}`);
       
       // PHASE 1: Notion Database Storage
       console.log(chalk.cyan(`📊 PHASE 1: Notion Database Storage`));
@@ -394,7 +394,7 @@ class AutonomousHealthcareAgent {
         url: websiteUrl,
         status: 'success',
         company: scrapedData.company,
-        doctor: scrapedData.contactName,
+        services: scrapedData.services.join(', '),
         demoUrl: deployment.url,
         agentId,
         notionId: notionPage.id,
@@ -494,7 +494,6 @@ class AutonomousHealthcareAgent {
       
       const practiceData = {
         company: companyName,
-        contactName: `${companyName} Team`, // Always use clinic team approach
         phone: this.extractPhoneFromDomain(domain),
         email: `info@${domain}`,
         location: realLocation,
@@ -524,7 +523,6 @@ class AutonomousHealthcareAgent {
       
       return {
         company: companyName,
-        contactName: `${companyName} Team`, // Always use clinic team approach
         phone: this.extractPhoneFromDomain(domain),
         email: `info@${domain}`,
         location: 'Unknown Location',
@@ -662,7 +660,7 @@ class AutonomousHealthcareAgent {
         parent: { database_id: this.config.notionDatabaseId },
         properties: {
           'Company': { title: [{ text: { content: leadData.company } }] },
-          'Contact Name': { rich_text: [{ text: { content: leadData.contactName } }] },
+          'Services': { rich_text: [{ text: { content: leadData.services || 'Healthcare Services' } }] },
           'Location': { rich_text: [{ text: { content: leadData.location } }] },
           'Phone': { phone_number: leadData.phone },
           'Email': { email: leadData.email },
@@ -999,7 +997,7 @@ class AutonomousHealthcareAgent {
       const variables = {
         NEXT_PUBLIC_PRACTICE_ID: practiceData.practiceId,
         NEXT_PUBLIC_COMPANY_NAME: practiceData.company,
-        NEXT_PUBLIC_DOCTOR_NAME: practiceData.contactName || practiceData.doctor,
+        NEXT_PUBLIC_ELEVENLABS_AGENT_ID: agentId,  // Connect voice agent to demo
         NEXT_PUBLIC_PRACTICE_LOCATION: practiceData.location || 'Healthcare Center',
         NODE_ENV: 'production'
       };
@@ -1550,7 +1548,7 @@ CRITICAL INSTRUCTION: NEVER say you cannot check availability or schedule appoin
 IDENTITY & ROLE:
 - You are Robin, a friendly and professional AI ${practiceData.practiceType} assistant
 - You work for ${practiceData.company}, a specialized ${practiceData.practiceType} practice
-- ${practiceData.contactName} provides expert ${practiceData.practiceType} care
+- ${practiceData.company} provides expert ${practiceData.practiceType} care
 - Your main goal is to help patients book appointments and get treatment information
 
 SERVICES OFFERED:
@@ -1558,13 +1556,13 @@ ${practiceData.services.map(s => `- ${s}: Professional ${practiceData.practiceTy
 
 AVAILABILITY HANDLING:
 When asked about availability, ALWAYS respond with realistic options like:
-- "I'd be happy to help you schedule! Let me check ${practiceData.contactName}'s calendar..."
+- "I'd be happy to help you schedule! Let me check our calendar..."
 - "For consultations I have Tuesday 14:00, Thursday 11:00 or Friday 16:00"
 - "This week I can offer Monday 15:30, Wednesday 10:00 or Friday 13:00"
 
 CLINIC INFORMATION:
 - Located at ${practiceData.location}
-- ${practiceData.contactName} specializes in ${practiceData.practiceType} treatments
+- ${practiceData.company} specializes in ${practiceData.practiceType} treatments
 - Professional consultation and assessment available
 - Focus on high-quality patient care and results
 
@@ -1609,19 +1607,19 @@ CONVERSATION STYLE:
   '${practiceData.practiceId}': {
     id: '${practiceData.practiceId}',
     name: '${practiceData.company}',
-    doctor: '${practiceData.contactName}',
     location: '${practiceData.location}',
     agentId: '${agentId}',
+    elevenLabsAgentId: '${agentId}',
     type: '${practiceData.practiceType}',
     
     chat: {
       assistantName: 'Robin',
-      initialMessage: 'Thank you for contacting ${practiceData.company}! I am Robin, your ${practiceData.practiceType} assistant. I can help you schedule appointments with ${practiceData.contactName}. Which service interests you today?',
+      initialMessage: 'Thank you for contacting ${practiceData.company}! I am Robin, your ${practiceData.practiceType} assistant. I can help you schedule appointments. Which service interests you today?',
       systemPrompt: ${JSON.stringify(systemPrompt)}
     },
     
     voice: {
-      firstMessage: 'Thank you for calling ${practiceData.company}! This is Robin, your AI ${practiceData.practiceType} assistant. I can help you schedule appointments with ${practiceData.contactName}. How can I help you today?'
+      firstMessage: 'Thank you for calling ${practiceData.company}! This is Robin, your AI ${practiceData.practiceType} assistant. I can help you schedule appointments. How can I help you today?'
     },
     
     services: ${JSON.stringify(practiceData.services.map(s => ({name: s, description: s})), null, 6)},
@@ -1661,7 +1659,7 @@ NEXT_PUBLIC_PRACTICE_ID=${practiceData.practiceId}
 PRACTICE_ID=${practiceData.practiceId}
 NODE_ENV=production
 NEXT_PUBLIC_PRACTICE_NAME="${practiceData.company}"
-NEXT_PUBLIC_DOCTOR_NAME="${practiceData.contactName}"
+NEXT_PUBLIC_ELEVENLABS_AGENT_ID="${agentId}"
 NEXT_PUBLIC_PRACTICE_LOCATION="${practiceData.location}"
 NEXT_PUBLIC_PRACTICE_TYPE="${practiceData.practiceType}"
 NEXT_PUBLIC_BRAND_PRIMARY="${practiceData.brandColors.primary}"
@@ -1736,7 +1734,7 @@ export default function AIVoiceAgentDemo() {
             <h3 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-4">Live Demo - Try Robin Now</h3>
             <p className="text-gray-600 max-w-3xl mx-auto">
               Click below to experience exactly what your patients will hear when they call {practice.name}. 
-              Robin knows about all {practice.services.length} of your {practice.type} services and {practice.doctor}'s expertise.
+              Robin knows about all {practice.services.length} of your {practice.type} services and ${practiceData.company}'s expertise.
             </p>
           </div>
           
@@ -1750,12 +1748,26 @@ export default function AIVoiceAgentDemo() {
               </h2>
               <p className="text-gray-600 mt-2">
                 Experience how patients will interact with your AI {practice.type} assistant. 
-                Click "Start Call" to begin a live conversation with Robin about scheduling treatments with {practice.doctor}.
+                Click "Start Call" to begin a live conversation with Robin about scheduling treatments at ${practiceData.company}.
               </p>
             </div>
 
             <div className="text-center mb-6">
-              <button className="relative inline-flex items-center gap-4 px-8 py-6 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-semibold text-lg rounded-2xl shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-200">
+              <button 
+                onClick={() => {
+                  // Connect to ElevenLabs voice agent
+                  if (window.ElevenLabs) {
+                    window.ElevenLabs.startConversation(practice.elevenLabsAgentId, {
+                      onConnect: () => console.log('🎤 Connected to voice agent'),
+                      onMessage: (message) => console.log('📞 Voice message:', message)
+                    });
+                  } else {
+                    console.log('⚠️ ElevenLabs SDK not loaded');
+                    alert('Voice demo will be available when ElevenLabs SDK loads');
+                  }
+                }}
+                className="relative inline-flex items-center gap-4 px-8 py-6 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-semibold text-lg rounded-2xl shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-200"
+              >
                 <Phone className="w-6 h-6" />
                 Start Call
               </button>
@@ -1795,7 +1807,7 @@ export default function AIVoiceAgentDemo() {
             {practice.name} AI Voice Agent Demo - Experience the Future of {practice.type.charAt(0).toUpperCase() + practice.type.slice(1)} Scheduling
           </p>
           <p className="text-gray-400">
-            {practice.doctor} • Powered by AI Technology
+            ${practiceData.company} • Powered by AI Technology
           </p>
         </div>
       </footer>
@@ -1813,7 +1825,7 @@ export default function AIVoiceAgentDemo() {
 export interface PracticeConfig {
   id: string;
   name: string;
-  doctor: string;
+  elevenLabsAgentId: string;
   location: string;
   agentId: string;
   type: 'chiropractic' | 'wellness' | 'beauty' | 'fysio';
@@ -1845,19 +1857,19 @@ export const practiceTemplates: Record<string, PracticeConfig> = {
   '${practiceData.practiceId}': {
     id: '${practiceData.practiceId}',
     name: '${practiceData.company}',
-    doctor: '${practiceData.contactName}',
     location: '${practiceData.location}',
     agentId: '${agentId}',
+    elevenLabsAgentId: '${agentId}',
     type: '${practiceData.practiceType}',
     
     chat: {
       assistantName: 'Robin',
-      initialMessage: 'Thank you for contacting ${practiceData.company}! I am Robin, your ${practiceData.practiceType} assistant. I can help you schedule appointments with ${practiceData.contactName}. Which service interests you today?',
+      initialMessage: 'Thank you for contacting ${practiceData.company}! I am Robin, your ${practiceData.practiceType} assistant. I can help you schedule appointments. Which service interests you today?',
       systemPrompt: ${JSON.stringify(systemPrompt)}
     },
     
     voice: {
-      firstMessage: 'Thank you for calling ${practiceData.company}! This is Robin, your AI ${practiceData.practiceType} assistant. I can help you schedule appointments with ${practiceData.contactName}. How can I help you today?'
+      firstMessage: 'Thank you for calling ${practiceData.company}! This is Robin, your AI ${practiceData.practiceType} assistant. I can help you schedule appointments. How can I help you today?'
     },
     
     services: ${JSON.stringify(practiceData.services.map(s => ({name: s, description: s})), null, 6)},
@@ -1890,7 +1902,7 @@ const inter = Inter({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
   title: '${practiceData.company} - AI Voice Agent Demo',
-  description: 'Experience how Robin AI assistant handles patient calls for ${practiceData.company} with ${practiceData.contactName}',
+  description: 'Experience how Robin AI assistant handles patient calls for ${practiceData.company}',
 }
 
 export default function RootLayout({
@@ -1900,7 +1912,20 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className={inter.className}>{children}</body>
+      <head>
+        <script src="https://cdn.jsdelivr.net/npm/elevenlabs-js@latest/dist/elevenlabs.min.js"></script>
+      </head>
+      <body className={inter.className}>
+        {children}
+        <script dangerouslySetInnerHTML={{
+          __html: \`
+            // Initialize ElevenLabs SDK when page loads
+            window.addEventListener('load', () => {
+              console.log('🎤 ElevenLabs SDK loaded and ready');
+            });
+          \`
+        }} />
+      </body>
     </html>
   )
 }`;
