@@ -2211,11 +2211,15 @@ NODE_ENV=production`;
       console.log(chalk.blue(`🤖 AI Chat request: "${userMessage}"`));
       console.log(chalk.blue(`🔑 Using OpenRouter API Key: ${this.config.openRouterApiKey ? 'SET' : 'MISSING'}`));
       
-      // Send typing indicator
-      await axios.post(`https://api.telegram.org/bot${this.config.telegramBotToken}/sendChatAction`, {
-        chat_id: chatId,
-        action: 'typing'
-      });
+      // Send typing indicator (optional, don't fail if it doesn't work)
+      try {
+        await axios.post(`https://api.telegram.org/bot${this.config.telegramBotToken}/sendChatAction`, {
+          chat_id: chatId,
+          action: 'typing'
+        });
+      } catch (typingError) {
+        console.log(chalk.yellow(`⚠️ Typing indicator failed: ${typingError.message}`));
+      }
       
       // Call OpenRouter API with unlimited retry (4000ms) for free models
       console.log(chalk.yellow(`📡 Making OpenRouter API call with unlimited retry...`));
