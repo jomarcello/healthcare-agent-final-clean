@@ -565,7 +565,7 @@ class AutonomousHealthcareAgent {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          model: 'zhipuai/glm-4-9b-chat',
+          model: 'google/gemini-2.5-flash-image-preview:free',
           messages: [
             {
               role: 'system',
@@ -610,7 +610,7 @@ class AutonomousHealthcareAgent {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          model: 'zhipuai/glm-4-9b-chat',
+          model: 'google/gemini-2.5-flash-image-preview:free',
           messages: [
             {
               role: 'system',
@@ -2228,7 +2228,7 @@ NODE_ENV=production`;
           console.log(chalk.cyan(`🔄 OpenRouter attempt ${attempt}...`));
           
           response = await axios.post('https://openrouter.ai/api/v1/chat/completions', {
-            model: 'qwen/qwen3-coder:free',
+            model: 'google/gemini-2.5-flash-image-preview:free',
             messages: [
               {
                 role: 'system',
