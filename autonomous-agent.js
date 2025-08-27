@@ -378,7 +378,7 @@ class AutonomousHealthcareAgent {
       console.log(`   ✅ Deployed to Railway: ${deployment.url}`);
       
       // PHASE 4: Notion Database Storage (after successful deployment)
-      console.log(chalk.cyan(`📊 PHASE 4: Notion Database Storage`));
+      console.log(chalk.cyan(`📊 PHASE 4: Notion Database Storage - NEW WORKFLOW ACTIVE`));
       const notionPage = await this.storeCompletedLead(scrapedData, agentId, repository, deployment, websiteUrl);
       console.log(`   ✅ Stored completed lead in Notion: ${notionPage.id}`);
       
