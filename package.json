@@ -1,40 +1,41 @@
 {
-  "name": "healthcare-agent",
+  "name": "autonomous-healthcare-agent",
   "version": "1.0.0",
-  "type": "module",
-  "private": true,
-  "description": "Healthcare Agent - Autonomous Healthcare Practice Lead Generation Agent",
-  "author": "Healthcare Agent Team",
+  "description": "Autonomous AI agent for healthcare practice lead generation and demo deployment automation",
+  "main": "autonomous-agent.js",
   "scripts": {
-    "dev": "node autonomous-agent.js",
-    "build": "echo 'No build required for Express server'",
     "start": "node autonomous-agent.js",
-    "lint": "echo 'No lint configured'"
+    "dev": "node autonomous-agent.js",
+    "test": "node test-complete-autonomous.js"
   },
   "keywords": [
-    "healthcare-automation",
-    "ai-lead-generation",
-    "mcp",
+    "autonomous-agent",
+    "healthcare",
+    "lead-generation",
     "railway-deployment",
-    "autonomous-agent"
+    "playwright-scraping",
+    "notion-database",
+    "elevenlabs-voice",
+    "github-automation"
   ],
+  "author": "Healthcare Automation AI",
+  "license": "MIT",
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.17.4",
-    "axios": "^1.9.0",
+    "@elevenlabs/elevenlabs-js": "^2.8.0",
+    "@modelcontextprotocol/sdk": "^1.17.2",
+    "@smithery/sdk": "^1.5.5",
+    "axios": "^1.6.0",
     "chalk": "^5.3.0",
     "cors": "^2.8.5",
-    "dotenv": "^16.0.0",
-    "express": "^4.18.0",
-    "winston": "^3.11.0"
+    "dotenv": "^16.3.1",
+    "elevenlabs": "^1.59.0",
+    "express": "^4.18.2"
   },
-  "devDependencies": {},
   "engines": {
-    "node": ">=18.0.0",
-    "npm": ">=8.0.0"
+    "node": ">=18.0.0"
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/jomarcello/leadsprint-ai.git"
-  },
-  "license": "MIT"
+    "url": "https://github.com/jomarcello/autonomous-healthcare-agent"
+  }
 }
