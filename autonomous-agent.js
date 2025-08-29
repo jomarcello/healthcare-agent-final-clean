@@ -599,7 +599,7 @@ Confirm appointments at "${practiceData.company}" without asking about location 
             console.log(`   🎤 Using correct ElevenLabs endpoint: /v1/convai/agents/create`);
             const response = await axios.post('https://api.elevenlabs.io/v1/convai/agents/create', payload, {
                 headers: {
-                    'Authorization': `Bearer ${config.elevenlabs_api_key}`,
+                    'xi-api-key': config.elevenlabs_api_key,
                     'Content-Type': 'application/json'
                 }
             });
