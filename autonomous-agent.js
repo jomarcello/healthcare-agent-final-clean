@@ -576,52 +576,33 @@ Confirm appointments at "${practiceData.company}" without asking about location 
         try {
             console.log(`   🎤 Creating ElevenLabs voice agent for ${practiceData.company}`);
             
-            // Try multiple ElevenLabs endpoints to find working one
-            let response;
-            const endpoints = [
-                {
-                    url: 'https://api.elevenlabs.io/v1/convai/agents',
-                    payload: {
-                        name: `${practiceData.company} Appointment Assistant`,
-                        prompt: voiceAgentTemplate,
+            // Use correct ElevenLabs agent creation endpoint from docs
+            const payload = {
+                conversation_config: {
+                    agent: {
+                        prompt: { prompt: voiceAgentTemplate },
+                        first_message: firstMessage,
+                        language: "en"
+                    },
+                    tts: {
                         voice_id: "21m00Tcm4TlvDq8ikWAM",
-                        language: "en",
-                        conversation_config: {
-                            turn_detection: { turn_timeout: 10 }
-                        }
+                        model: "eleven_turbo_v2_5"
+                    },
+                    turn_detection: {
+                        turn_timeout: 10
                     }
                 },
-                {
-                    url: 'https://api.elevenlabs.io/v1/convai/agents',
-                    payload: {
-                        name: `${practiceData.company} Agent`,
-                        prompt: voiceAgentTemplate.substring(0, 1000), // Truncated for testing
-                        voice_id: "21m00Tcm4TlvDq8ikWAM"
-                    }
-                }
-            ];
+                name: `${practiceData.company} Appointment Assistant`,
+                tags: ["healthcare", "appointment-booking"]
+            };
 
-            let lastError;
-            for (const endpoint of endpoints) {
-                try {
-                    console.log(`   🔄 Trying ElevenLabs endpoint: ${endpoint.url}`);
-                    response = await axios.post(endpoint.url, endpoint.payload, {
-                        headers: {
-                            'Authorization': `Bearer ${config.elevenlabs_api_key}`,
-                            'Content-Type': 'application/json'
-                        }
-                    });
-                    break; // Success, exit loop
-                } catch (endpointError) {
-                    lastError = endpointError;
-                    console.log(`   ❌ Endpoint failed: ${endpointError.message}`);
-                    continue; // Try next endpoint
+            console.log(`   🎤 Using correct ElevenLabs endpoint: /v1/convai/agents/create`);
+            const response = await axios.post('https://api.elevenlabs.io/v1/convai/agents/create', payload, {
+                headers: {
+                    'Authorization': `Bearer ${config.elevenlabs_api_key}`,
+                    'Content-Type': 'application/json'
                 }
-            }
-
-            if (!response) {
-                throw lastError || new Error('All ElevenLabs endpoints failed');
-            }
+            });
 
             // Handle different response formats from ElevenLabs
             const agentId = response.data?.agent_id || response.data?.conversation_id || response.data?.id || `agent_${Date.now()}`;
