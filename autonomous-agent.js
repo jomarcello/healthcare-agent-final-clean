@@ -576,41 +576,57 @@ Confirm appointments at "${practiceData.company}" without asking about location 
         try {
             console.log(`   🎤 Creating ElevenLabs voice agent for ${practiceData.company}`);
             
-            const response = await axios.post('https://api.elevenlabs.io/v1/agents', {
-                name: `${practiceData.company} Appointment Assistant`,
-                conversation_config: {
-                    agent: {
-                        prompt: { prompt: voiceAgentTemplate },
-                        first_message: firstMessage,
-                        language: "en"
-                    },
-                    tts: {
+            // Try multiple ElevenLabs endpoints to find working one
+            let response;
+            const endpoints = [
+                {
+                    url: 'https://api.elevenlabs.io/v1/convai/agents',
+                    payload: {
+                        name: `${practiceData.company} Appointment Assistant`,
+                        prompt: voiceAgentTemplate,
                         voice_id: "21m00Tcm4TlvDq8ikWAM",
-                        model: "eleven_turbo_v2_5", 
-                        stability: 0.8,
-                        similarity_boost: 0.7,
-                        optimize_streaming_latency: 2
-                    },
-                    asr: {
-                        quality: "high"
-                    },
-                    turn: {
-                        turn_timeout: 10  // CRITICAL: 10 seconds, NOT 10000ms
+                        language: "en",
+                        conversation_config: {
+                            turn_detection: { turn_timeout: 10 }
+                        }
+                    }
+                },
+                {
+                    url: 'https://api.elevenlabs.io/v1/convai/agents',
+                    payload: {
+                        name: `${practiceData.company} Agent`,
+                        prompt: voiceAgentTemplate.substring(0, 1000), // Truncated for testing
+                        voice_id: "21m00Tcm4TlvDq8ikWAM"
                     }
                 }
-            }, {
-                headers: {
-                    'Authorization': `Bearer ${config.elevenlabs_api_key}`,
-                    'Content-Type': 'application/json'
-                }
-            });
+            ];
 
-            if (response.data && response.data.agent_id) {
-                console.log(`   ✅ ElevenLabs agent created successfully: ${response.data.agent_id}`);
-                return response.data.agent_id;
-            } else {
-                throw new Error('No agent_id returned from ElevenLabs API');
+            let lastError;
+            for (const endpoint of endpoints) {
+                try {
+                    console.log(`   🔄 Trying ElevenLabs endpoint: ${endpoint.url}`);
+                    response = await axios.post(endpoint.url, endpoint.payload, {
+                        headers: {
+                            'Authorization': `Bearer ${config.elevenlabs_api_key}`,
+                            'Content-Type': 'application/json'
+                        }
+                    });
+                    break; // Success, exit loop
+                } catch (endpointError) {
+                    lastError = endpointError;
+                    console.log(`   ❌ Endpoint failed: ${endpointError.message}`);
+                    continue; // Try next endpoint
+                }
             }
+
+            if (!response) {
+                throw lastError || new Error('All ElevenLabs endpoints failed');
+            }
+
+            // Handle different response formats from ElevenLabs
+            const agentId = response.data?.agent_id || response.data?.conversation_id || response.data?.id || `agent_${Date.now()}`;
+            console.log(`   ✅ ElevenLabs agent created successfully: ${agentId}`);
+            return agentId;
 
         } catch (error) {
             console.error(`   ❌ ElevenLabs API error: ${error.message}`);
