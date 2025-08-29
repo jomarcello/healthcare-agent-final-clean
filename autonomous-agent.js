@@ -335,7 +335,7 @@ class CompleteHealthcareAutomationAgent {
     }
 
     // ===== STEP 3: GITHUB REPOSITORY CREATION =====
-    async createPersonalizedRepository(practiceData) {
+    async createPersonalizedRepository(practiceData, elevenlabsAgentId = null) {
         console.log(`📦 STEP 3: Creating fault-tolerant personalized repository`);
         this.currentStep = 'github-repo';
         
@@ -485,7 +485,9 @@ class CompleteHealthcareAutomationAgent {
                 variables: {
                     NEXT_PUBLIC_PRACTICE_ID: practiceData.practiceId,
                     NEXT_PUBLIC_COMPANY: practiceData.company,
-                    NEXT_PUBLIC_DOMAIN: practiceData.domain
+                    NEXT_PUBLIC_DOMAIN: practiceData.domain,
+                    NEXT_PUBLIC_ELEVENLABS_AGENT_ID: elevenlabsAgentId || 'fallback-agent-id',
+                    NODE_ENV: 'production'
                 }
             });
             
@@ -503,6 +505,120 @@ class CompleteHealthcareAutomationAgent {
             
         } catch (error) {
             throw new Error(`Railway MCP deployment failed: ${error.message}`);
+        }
+    }
+
+    // ===== ELEVENLABS VOICE AGENT CREATION =====
+    async createElevenLabsVoiceAgent(practiceData) {
+        if (!config.elevenlabs_api_key) {
+            throw new Error('ElevenLabs API key not configured');
+        }
+
+        const voiceAgentTemplate = `
+## 🏥 **${practiceData.company} Appointment Scheduler Prompt**
+
+**You are the professional, friendly appointment scheduling assistant at ${practiceData.company}. Your role is to efficiently and warmly help clients schedule their treatments while providing clear, detailed, and reassuring information about our services.**
+
+### 🎯 **GENERAL INSTRUCTIONS**
+- Ask only ONE clear question at a time
+- Use friendly, natural, conversational language  
+- Acknowledge customer responses before moving to the next question
+- Never ask multiple questions in one message
+- If the customer seems unsure, briefly explain the treatments to help them choose
+- Always collect and confirm the customer's full name, phone number, and email address
+
+### 📍 **LOCATION POLICY**
+${practiceData.company} is located at:
+**${practiceData.location}**
+
+Confirm appointments at "${practiceData.company}" without asking about location preference.
+
+### 🏥 **AVAILABLE TREATMENTS & QUESTION FLOWS**
+
+**${practiceData.company} offers comprehensive services:**
+
+#### 1️⃣ **Consultation**
+*Comprehensive assessment and personalized treatment planning*
+
+**If customer mentions consultation:**
+- "Perfect choice! Our consultations at ${practiceData.company} provide personalized treatment recommendations. Are you looking to address specific concerns or general health?"
+- **Follow-up:** "Have you had a professional consultation before?"
+
+### 🗓️ **APPOINTMENT SCHEDULING FLOW**
+
+**✅ Always follow this professional progression:**
+
+1. **Confirm treatment choice and specific details**
+2. **Ask about prior experience (if relevant)**  
+3. **Confirm preferred date and time**
+   - If unsure, suggest 1-2 available options
+4. **Collect customer details one at a time:**
+   - Full name
+   - Phone number  
+   - Email address
+5. **Repeat details for confirmation:**
+   *"Just to confirm, I have your name as [Name], phone number as [Phone], and email as [Email]. Is that correct?"*
+6. **Final appointment confirmation:**
+   *"Your appointment is scheduled for [Date/Time] at ${practiceData.company}."*
+7. **Professional closing:**
+   *"You'll receive a confirmation email shortly. Thank you for choosing ${practiceData.company}, and we look forward to helping you achieve your goals!"*
+
+### 💙 **TONE GUIDELINES**
+- **Warm, professional, and caring**
+- **Sound knowledgeable about treatments**  
+- **Emphasize expertise and clinic environment**
+- **Focus on enhancement and confidence**
+- **Use terms like "goals," "enhancement," "natural results"**
+`.trim();
+
+        const firstMessage = `Hi! Welcome to ${practiceData.company}. I'm here to help you book your appointment. How can I assist you today?`;
+
+        try {
+            console.log(`   🎤 Creating ElevenLabs voice agent for ${practiceData.company}`);
+            
+            const response = await axios.post('https://api.elevenlabs.io/v1/agents', {
+                name: `${practiceData.company} Appointment Assistant`,
+                conversation_config: {
+                    agent: {
+                        prompt: { prompt: voiceAgentTemplate },
+                        first_message: firstMessage,
+                        language: "en"
+                    },
+                    tts: {
+                        voice_id: "21m00Tcm4TlvDq8ikWAM",
+                        model: "eleven_turbo_v2_5", 
+                        stability: 0.8,
+                        similarity_boost: 0.7,
+                        optimize_streaming_latency: 2
+                    },
+                    asr: {
+                        quality: "high"
+                    },
+                    turn: {
+                        turn_timeout: 10  // CRITICAL: 10 seconds, NOT 10000ms
+                    }
+                }
+            }, {
+                headers: {
+                    'Authorization': `Bearer ${config.elevenlabs_api_key}`,
+                    'Content-Type': 'application/json'
+                }
+            });
+
+            if (response.data && response.data.agent_id) {
+                console.log(`   ✅ ElevenLabs agent created successfully: ${response.data.agent_id}`);
+                return response.data.agent_id;
+            } else {
+                throw new Error('No agent_id returned from ElevenLabs API');
+            }
+
+        } catch (error) {
+            console.error(`   ❌ ElevenLabs API error: ${error.message}`);
+            if (error.response) {
+                console.error(`   📋 Response status: ${error.response.status}`);
+                console.error(`   📋 Response data:`, JSON.stringify(error.response.data, null, 2));
+            }
+            throw error;
         }
     }
     
@@ -570,9 +686,33 @@ class CompleteHealthcareAutomationAgent {
             console.log(`   ⚡ Fallback data created: ${practiceData.company}`);
         }
 
-        // ===== PHASE 1: NOTION STORAGE (FAULT-TOLERANT) =====
+        // ===== PHASE 1: ELEVENLABS VOICE AGENT CREATION (FAULT-TOLERANT) =====
+        let elevenlabsAgentId = null;
         try {
-            console.log(`\n📊 PHASE 1: Notion Database Storage`);
+            console.log(`\n🎤 PHASE 1: ElevenLabs Voice Agent Creation`);
+            elevenlabsAgentId = await this.createElevenLabsVoiceAgent(practiceData);
+            
+            stepResults.elevenlabs = { success: true, data: { agentId: elevenlabsAgentId } };
+            console.log(`   ✅ ElevenLabs agent created: ${elevenlabsAgentId}`);
+            
+        } catch (elevenlabsError) {
+            console.error(`   ❌ ElevenLabs agent creation failed: ${elevenlabsError.message}`);
+            console.log(`   🔄 Using fallback agent ID`);
+            
+            elevenlabsAgentId = 'fallback-agent-id-' + Date.now();
+            stepResults.elevenlabs = { 
+                success: false, 
+                error: elevenlabsError.message, 
+                data: { agentId: elevenlabsAgentId },
+                fallback_used: true
+            };
+            
+            console.log(`   ⚡ Fallback agent ID created: ${elevenlabsAgentId}`);
+        }
+
+        // ===== PHASE 2: NOTION STORAGE (FAULT-TOLERANT) =====
+        try {
+            console.log(`\n📊 PHASE 2: Notion Database Storage`);
             notionResult = await this.storeLeadInNotion(practiceData);
             
             stepResults.notion = { success: true, data: notionResult };
@@ -599,10 +739,10 @@ class CompleteHealthcareAutomationAgent {
             console.log(`   ⚡ Emergency record created - workflow continues`);
         }
 
-        // ===== PHASE 2+3: REPOSITORY & DEPLOYMENT (FAULT-TOLERANT) =====
+        // ===== PHASE 3+4: REPOSITORY & DEPLOYMENT (FAULT-TOLERANT) =====
         try {
-            console.log(`\n🏗️ PHASE 2-3: Repository Creation & Railway Deployment`);
-            deploymentResult = await this.createPersonalizedRepository(practiceData);
+            console.log(`\n🏗️ PHASE 3-4: Repository Creation & Railway Deployment`);
+            deploymentResult = await this.createPersonalizedRepository(practiceData, elevenlabsAgentId);
             
             stepResults.deployment = { success: deploymentResult.success, data: deploymentResult };
             
@@ -664,6 +804,11 @@ class CompleteHealthcareAutomationAgent {
                 project_id: deploymentResult.project_id,
                 service_id: deploymentResult.service_id
             },
+            elevenlabs: {
+                agent_id: elevenlabsAgentId,
+                created: stepResults.elevenlabs.success,
+                is_fallback: stepResults.elevenlabs.fallback_used || false
+            },
             notion: {
                 stored: notionResult.success,
                 lead_id: notionResult.leadId,
@@ -671,6 +816,7 @@ class CompleteHealthcareAutomationAgent {
             },
             step_analysis: {
                 scraping: stepResults.scraping,
+                elevenlabs: stepResults.elevenlabs,
                 notion: stepResults.notion,
                 deployment: stepResults.deployment,
                 successful_steps: successfulSteps,
@@ -686,11 +832,17 @@ class CompleteHealthcareAutomationAgent {
                 enabled: true,
                 fallbacks_used: [
                     stepResults.scraping.fallback_used && 'scraping',
+                    stepResults.elevenlabs.fallback_used && 'elevenlabs',
                     stepResults.notion.emergency_fallback && 'notion-emergency',
                     stepResults.deployment.fallback_used && 'deployment'
                 ].filter(Boolean)
             }
         };
+
+        // Add helper properties for easy access in Telegram responses
+        result.practiceData = practiceData;
+        result.demo_url = deploymentResult.railway_url || deploymentResult.url || 'Processing...';
+        result.elevenlabsAgentId = elevenlabsAgentId;
 
         // Store result for dashboard
         this.deploymentResults.push(result);
@@ -863,7 +1015,7 @@ class CompleteHealthcareAutomationAgent {
                 );
                 
                 try {
-                    const workflowResult = await this.runCompleteWorkflow(practice.url);
+                    const workflowResult = await this.processHealthcarePractice(practice.url);
                     results.push(workflowResult);
                     
                     await this.sendTelegramMessage(chatId, 
@@ -1118,7 +1270,7 @@ class CompleteHealthcareAutomationAgent {
                     // Process in background
                     setImmediate(async () => {
                         try {
-                            const result = await this.runCompleteWorkflow(url);
+                            const result = await this.processHealthcarePractice(url);
                             
                             if (result.success) {
                                 await this.sendTelegramMessage(chatId, 
