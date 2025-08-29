@@ -576,24 +576,20 @@ Confirm appointments at "${practiceData.company}" without asking about location 
         try {
             console.log(`   🎤 Creating ElevenLabs voice agent for ${practiceData.company}`);
             
-            // Use correct ElevenLabs agent creation endpoint from docs
+            // Use correct ElevenLabs agent creation payload structure from docs
             const payload = {
                 conversation_config: {
-                    agent: {
-                        prompt: { prompt: voiceAgentTemplate },
-                        first_message: firstMessage,
-                        language: "en"
-                    },
-                    tts: {
-                        voice_id: "21m00Tcm4TlvDq8ikWAM",
-                        model: "eleven_turbo_v2_5"
-                    },
-                    turn_detection: {
-                        turn_timeout: 10
-                    }
+                    model: "gpt-4o-mini",
+                    temperature: 0.7,
+                    max_tokens: 150,
+                    system_prompt: voiceAgentTemplate,
+                    tools: [],
+                    knowledge_base_ids: []
                 },
-                name: `${practiceData.company} Appointment Assistant`,
-                tags: ["healthcare", "appointment-booking"]
+                platform_settings: {
+                    name: `${practiceData.company} Appointment Assistant`,
+                    tags: ["healthcare", "appointment-booking"]
+                }
             };
 
             console.log(`   🎤 Using correct ElevenLabs endpoint: /v1/convai/agents/create`);
