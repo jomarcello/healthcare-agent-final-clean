@@ -805,20 +805,22 @@ class CompleteHealthcareAutomationAgent {
     }
 
     // ===== TELEGRAM INTEGRATION =====
-    async sendTelegramMessage(chatId, text) {
+    async sendTelegramMessage(chatId, text, options = {}) {
         if (!config.telegram_bot_token) {
             console.warn('⚠️ Telegram bot token not configured');
             return;
         }
 
         try {
+            const payload = {
+                chat_id: chatId,
+                text: text,
+                parse_mode: options.parse_mode || 'HTML'
+            };
+
             const response = await axios.post(
                 `https://api.telegram.org/bot${config.telegram_bot_token}/sendMessage`,
-                {
-                    chat_id: chatId,
-                    text: text,
-                    parse_mode: 'HTML'
-                }
+                payload
             );
 
             console.log(`📤 Telegram message sent to ${chatId}`);
@@ -827,6 +829,104 @@ class CompleteHealthcareAutomationAgent {
         } catch (error) {
             console.error(`❌ Failed to send Telegram message: ${error.message}`);
             throw error;
+        }
+    }
+
+    // ===== EXA SEARCH & PRACTICE PROCESSING =====
+    async searchAndProcessPractices(practiceType, location, count, chatId) {
+        console.log(`🔍 Searching for ${count} ${practiceType} in ${location}`);
+        
+        try {
+            // EXA API search for healthcare practices
+            const searchQuery = `${practiceType} ${location} healthcare practice website`;
+            const searchResults = await this.searchPracticesWithEXA(searchQuery, count);
+            
+            if (!searchResults || searchResults.length === 0) {
+                console.log('❌ No search results found');
+                return [];
+            }
+
+            await this.sendTelegramMessage(chatId, 
+                `✅ Found ${searchResults.length} practices! Starting complete 5-phase workflow for each...\n\n` +
+                `Processing practices:\n${searchResults.map((r, i) => `${i + 1}. ${r.title}`).join('\n')}`
+            );
+
+            const results = [];
+            
+            // Process each found practice through complete workflow
+            for (let i = 0; i < searchResults.length; i++) {
+                const practice = searchResults[i];
+                
+                await this.sendTelegramMessage(chatId, 
+                    `🔄 Processing ${i + 1}/${searchResults.length}: ${practice.title}\n` +
+                    `URL: ${practice.url}`
+                );
+                
+                try {
+                    const workflowResult = await this.runCompleteWorkflow(practice.url);
+                    results.push(workflowResult);
+                    
+                    await this.sendTelegramMessage(chatId, 
+                        `✅ Completed ${i + 1}/${searchResults.length}: ${workflowResult.practiceData?.company || practice.title}\n` +
+                        `🌐 Demo: ${workflowResult.demo_url || 'Deploying...'}`
+                    );
+                    
+                } catch (error) {
+                    console.error(`❌ Failed to process ${practice.title}:`, error);
+                    results.push({
+                        success: false,
+                        error: error.message,
+                        practiceData: { company: practice.title, url: practice.url }
+                    });
+                    
+                    await this.sendTelegramMessage(chatId, 
+                        `❌ Failed ${i + 1}/${searchResults.length}: ${practice.title}\n` +
+                        `Error: ${error.message}`
+                    );
+                }
+            }
+            
+            return results;
+            
+        } catch (error) {
+            console.error('❌ Search and process error:', error);
+            throw error;
+        }
+    }
+
+    async searchPracticesWithEXA(query, count) {
+        if (!config.exa_api_key) {
+            console.warn('⚠️ EXA API key not configured, using fallback search');
+            return [];
+        }
+
+        try {
+            const response = await axios.post(
+                'https://api.exa.ai/search',
+                {
+                    query: query,
+                    num_results: Math.min(count, 10),
+                    type: 'neural',
+                    use_autoprompt: true,
+                    include_domains: [],
+                    exclude_domains: ['linkedin.com', 'facebook.com', 'instagram.com', 'twitter.com']
+                },
+                {
+                    headers: {
+                        'Authorization': `Bearer ${config.exa_api_key}`,
+                        'Content-Type': 'application/json'
+                    }
+                }
+            );
+
+            return response.data.results || [];
+            
+        } catch (error) {
+            console.error('❌ EXA API error:', error.message);
+            
+            // Fallback: Return empty array if EXA fails
+            console.log('🔄 EXA search failed, no fallback results available');
+            return [];
         }
     }
 
@@ -1006,11 +1106,14 @@ class CompleteHealthcareAutomationAgent {
                 // Extract healthcare practice URL from the message
                 const urlMatch = messageText.match(/https?:\/\/[^\s]+/);
                 
+                // Extract dynamic search commands (find/search N practices in location)
+                const searchMatch = messageText.match(/(?:find|search for?)\s+(\d+)\s+(.+?)\s+(?:in|from)\s+(.+)/i);
+                
                 if (urlMatch) {
                     const url = urlMatch[0];
                     
                     // Send processing started message
-                    await this.sendTelegramMessage(chatId, `🤖 Processing healthcare practice: ${url}\n\nStarting complete automation workflow...`);
+                    await this.sendTelegramMessage(chatId, `🤖 Processing healthcare practice: ${url}\n\nStarting complete 5-phase automation workflow...`);
                     
                     // Process in background
                     setImmediate(async () => {
@@ -1021,9 +1124,11 @@ class CompleteHealthcareAutomationAgent {
                                 await this.sendTelegramMessage(chatId, 
                                     `✅ Complete! Healthcare automation finished:\n\n` +
                                     `🏥 Practice: ${result.practiceData?.company || 'N/A'}\n` +
-                                    `👨‍⚕️ Doctor: ${result.practiceData?.doctor || 'N/A'}\n` +
+                                    `📍 Location: ${result.practiceData?.location || 'N/A'}\n` +
+                                    `🎤 Voice Agent: ${result.elevenlabsAgentId ? '✅ Created' : '❌ Failed'}\n` +
+                                    `📦 Repository: ${result.repositoryUrl || 'N/A'}\n` +
                                     `🌐 Demo URL: ${result.demo_url || 'Processing...'}\n\n` +
-                                    `📊 Full workflow completed successfully!`
+                                    `📊 Full 5-phase workflow completed successfully!`
                                 );
                             } else {
                                 await this.sendTelegramMessage(chatId, 
@@ -1036,19 +1141,60 @@ class CompleteHealthcareAutomationAgent {
                         }
                     });
                     
+                } else if (searchMatch) {
+                    const [, count, practiceType, location] = searchMatch;
+                    const searchCount = parseInt(count);
+                    
+                    await this.sendTelegramMessage(chatId, 
+                        `🔍 Searching for ${searchCount} ${practiceType} in ${location}...\n\n` +
+                        `Using EXA API to find healthcare practices.\nThis may take a moment...`
+                    );
+                    
+                    // Process search in background
+                    setImmediate(async () => {
+                        try {
+                            const results = await this.searchAndProcessPractices(practiceType, location, searchCount, chatId);
+                            
+                            if (results && results.length > 0) {
+                                await this.sendTelegramMessage(chatId, 
+                                    `🎉 Search completed! Found and processed ${results.length} practices:\n\n` +
+                                    results.map((r, i) => 
+                                        `${i + 1}. ${r.practiceData?.company || 'Practice'}\n` +
+                                        `   📍 ${r.practiceData?.location || 'Unknown location'}\n` +
+                                        `   🌐 ${r.demo_url || 'Deployment pending...'}\n`
+                                    ).join('\n') + 
+                                    `\n✅ All workflows completed!`
+                                );
+                            } else {
+                                await this.sendTelegramMessage(chatId, 
+                                    `❌ Search failed: No ${practiceType} found in ${location}\n\n` +
+                                    `Try a different search term or location.`
+                                );
+                            }
+                        } catch (error) {
+                            await this.sendTelegramMessage(chatId, `❌ Search error: ${error.message}`);
+                        }
+                    });
+                    
                 } else {
-                    // No URL found, send help message
+                    // No URL or search found, send help message
                     await this.sendTelegramMessage(chatId, 
                         `🏥 Healthcare Automation Agent\n\n` +
-                        `Send me a healthcare practice URL to start automation:\n` +
-                        `Example: https://drsmith.com\n\n` +
-                        `I will:\n` +
-                        `1. 🔍 Scrape practice information\n` +
-                        `2. 📊 Store in Notion database\n` +
-                        `3. 📦 Create GitHub repository\n` +
-                        `4. 🚀 Deploy to Railway\n` +
-                        `5. 🌐 Provide demo URL\n\n` +
-                        `Current status: ${this.currentStep}`
+                        `💡 <b>Two ways to use me:</b>\n\n` +
+                        `1️⃣ <b>Direct URL Processing:</b>\n` +
+                        `Send: <code>https://drsmith.com</code>\n\n` +
+                        `2️⃣ <b>Dynamic Search & Process:</b>\n` +
+                        `Send: <code>find 2 cosmetic clinics in london</code>\n` +
+                        `Send: <code>search for 1 dental practice in amsterdam</code>\n` +
+                        `Send: <code>find 3 wellness centers in toronto</code>\n\n` +
+                        `🔄 <b>Complete 5-Phase Workflow:</b>\n` +
+                        `1. 🔍 Web scraping & data extraction\n` +
+                        `2. 🎤 ElevenLabs voice agent creation\n` +
+                        `3. 📦 GitHub repository generation\n` +
+                        `4. 🚀 Railway deployment automation\n` +
+                        `5. 📊 Notion database storage\n\n` +
+                        `Current status: ${this.currentStep}`,
+                        { parse_mode: 'HTML' }
                     );
                 }
 
